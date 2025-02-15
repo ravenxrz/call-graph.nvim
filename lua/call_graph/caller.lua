@@ -17,7 +17,7 @@ local genrate_call_graph_from_node
 local function make_node_key(uri, line, func_name)
   local file_path = vim.uri_to_fname(uri)
   local file_name = vim.fn.fnamemodify(file_path, ":t")
-  local node_text = string.format("%s:%d@%s", file_name, line + 1, func_name)
+  local node_text = string.format("%s@%s:%d", func_name, file_name, line + 1)
   return node_text
 end
 
