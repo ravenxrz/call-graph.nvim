@@ -12,16 +12,15 @@ local GraphDrawer = {}
 function GraphDrawer:new(bufnr)
   local self = {
     bufnr = bufnr,
-    node_positions = {}, -- { [node_id: interger]: {row: integer, col: integer} }
+    node_positions = {}, -- { [node_id: integer]: {row: integer, col: integer} }
   }
   setmetatable(self, { __index = GraphDrawer })
   return self
 end
 
-
 -- 确保缓冲区有足够的行
 ---@param self
----@param target_line_cnt row number, zero-based indexing, inclusive
+---@param target_line_cnt integer, row number, zero-based indexing, inclusive
 local function ensure_buffer_has_lines(self, target_line_cnt)
   local line_count = vim.api.nvim_buf_line_count(self.bufnr)
   if target_line_cnt > line_count then
@@ -35,8 +34,8 @@ end
 
 -- 确保缓冲区行有足够的列
 ---@param self
----@param line row number, zoer-based indexing , inclusive
----@param required_col column number, zero-based indexing, exclusive
+---@param line integer, row number, zoer-based indexing , inclusive
+---@param required_col integer, column number, zero-based indexing, exclusive
 local function ensure_buffer_line_has_cols(self, line, required_col)
   local line_text = vim.api.nvim_buf_get_lines(self.bufnr, line, line + 1, false)[1] or ""
   local line_length = #line_text
@@ -58,6 +57,7 @@ local function draw_node(self, node, row, col)
 end
 
 
+---@class Direction
 local Direction = {
   UP = "up",
   DOWN = "down",
@@ -65,32 +65,55 @@ local Direction = {
   RIGHT = "right",
 }
 
---- @param start_row start
---- @param end_row exclusive
---- @param which column
-local function draw_v_line(self, start_row, end_row, col)
+--- @param start_row integer, start row
+--- @param end_row integer, exclusive
+--- @param col integer, column
+--- @param direction Direction, which direction
+local function draw_v_line(self, start_row, end_row, col, direction)
   assert(start_row <= end_row, string.format("start_row: %d, end_row: %d", start_row, end_row))
   ensure_buffer_has_lines(self, end_row)
+
   for line = start_row, end_row - 1 do
     ensure_buffer_line_has_cols(self, line, col)
-    vim.api.nvim_buf_set_text(self.bufnr, line, col, line, col, { "|" })
+
+    -- 处理箭头样式
+    local fill = "|"
+    if direction == Direction.UP and line == start_row then
+      fill = "^"
+    elseif direction == Direction.DOWN and line == end_row - 1 then
+      fill = "v"
+    end
+    vim.api.nvim_buf_set_text(self.bufnr, line, col, line, col, { fill })
   end
 end
 
---- @param which row
---- @param start_col start of col
---- @param end_col end of cold , exclusive
-local function draw_h_line(self, row, start_col, end_col)
+--- @param row integer, which row
+--- @param start_col integer, start of col
+--- @param end_col integer, end of cold , exclusive
+--- @param direction Direction, which direction
+local function draw_h_line(self, row, start_col, end_col, direction)
   assert(start_col <= end_col, string.format("start_col: %d, end_col: %d", start_col, end_col))
+  local length = end_col - start_col
+  if length <= 0 then return end
+
   ensure_buffer_has_lines(self, row + 1)
   ensure_buffer_line_has_cols(self, row, end_col)
-  local fill = string.rep("-", end_col - start_col)
+  local fill
+  if direction == Direction.LEFT then
+    fill = "<" .. string.rep("-", math.max(length - 1, 0))
+  elseif direction == Direction.RIGHT then
+    fill = string.rep("-", math.max(length - 1, 0)) .. ">"
+  else
+    fill = string.rep("-", length)
+  end
   vim.api.nvim_buf_set_text(self.bufnr, row, start_col, row, end_col, { fill })
 end
 
 local function draw_edge(self, lhs, rhs)
   local lhs_pos = self.node_positions[lhs.nodeid]
   local rhs_pos = self.node_positions[rhs.nodeid]
+  local h_direction = Direction.LEFT
+  local v_direction = Direction.DOWN
   if lhs_pos.col > rhs_pos.col then
     lhs, rhs = rhs, lhs
     lhs_pos, rhs_pos = rhs_pos, lhs_pos
@@ -107,7 +130,7 @@ local function draw_edge(self, lhs, rhs)
       fill_start_col = lhs_pos.col + #lhs.text
       fill_end_row = rhs_pos.row
       fill_end_col = rhs_pos.col
-      draw_h_line(self, fill_start_row, fill_start_col, fill_end_col)
+      draw_h_line(self, fill_start_row, fill_start_col, fill_end_col, Direction.LEFT)
       return
     end
 
@@ -117,7 +140,7 @@ local function draw_edge(self, lhs, rhs)
       fill_start_col = lhs_pos.col
       fill_end_row = rhs_pos.row
       fill_end_col = rhs_pos.col
-      draw_v_line(self, fill_start_row, fill_end_row, fill_start_col)
+      draw_v_line(self, fill_start_row, fill_end_row, fill_start_col, Direction.UP)
       return
     end
 
@@ -128,7 +151,7 @@ local function draw_edge(self, lhs, rhs)
 
     -- 绘制lhs到中间列的水平线
     if mid_col > parent_end_col then
-      draw_h_line(self, lhs_pos.row, parent_end_col, mid_col)
+      draw_h_line(self, lhs_pos.row, parent_end_col, mid_col, Direction.LEFT)
     end
 
     -- 绘制中间列的垂直线

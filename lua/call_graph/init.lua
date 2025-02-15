@@ -15,7 +15,4 @@ function M.setup()
   create_user_cmd()
 end
 
-
-M.setup()
-
 return M

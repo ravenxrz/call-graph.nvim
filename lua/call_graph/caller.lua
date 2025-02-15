@@ -1,47 +1,79 @@
-local M = {}
+local M = {
+  --- @type Node
+  root_node = {},
+  buf = {
+    bufid = -1,
+    graph = nil
+  },
+  pending_request = 0
+}
 
-function M._incoming_call_handler(err, result, ctx)
-  if err then
-    vim.notify("Error getting incoming calls: " .. err, vim.log.levels.ERROR)
-    return
+local genrate_call_graph_from_node
+
+local function draw()
+  local Drawer = require("call_graph.drawer")
+  if M.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(M.buf.bufid) then
+    M.buf.bufid = vim.api.nvim_create_buf(true, true)
+    M.buf.graph = Drawer:new(M.buf.bufid)
   end
-  if not result or #result == 0 then
-    vim.notify("No incoming calls found", vim.log.levels.WARN)
-    return
-  end
-
-  -- now we have results, genrate node
-  -- lines = {}
-  -- for _, call in ipairs(result) do
-  --   local from_name = call.from.name
-  --   local from_line = call.from.range.start.line + 1 -- Neovim 的行号从 1 开始
-  --   local from_character = call.from.range.start.character + 1
-  --   local from_uri = call.from.uri
-  --   local line_text = string.format("%s (%s:%d:%d)", from_name, from_uri, from_line, from_character)
-  --   table.insert(lines, line_text)
-  -- end
-  -- P(lines)
-
-  local bufid = vim.api.nvim_create_buf(true, true)
-  local drawer = require("call_graph.drawer")
-  local node = require("call_graph.class.node")
-  -- local edge = require("call_graph.class.edge")
-  -- local file_pos = require("call_graph.class.file_pos")
-  local graph = drawer:new(bufid)
-  local node1 = node:new("node1", {})
-  local node2 = node:new("node2", {})
-  local node3 = node:new("node3", {})
-
-  node1.children = { node2, node3 }
-  node2.children = { node3 }
-  graph:draw(node1)
-  -- local node3 = node:new("run2", {})
-  -- graph:add_edge(node1, node2)
-  -- graph:add_edge(node2, node3)
-  vim.api.nvim_set_current_buf(bufid)
+  M.buf.graph:draw(M.root_node)
+  vim.api.nvim_set_current_buf(M.buf.bufid)
 end
 
-function M._find_buf_client()
+local function incoming_call_done()
+  M.pending_request = M.pending_request - 1
+  if M.pending_request == 0 then
+    draw()
+  end
+end
+
+local function incoming_call_handler(err, result, _, my_ctx)
+  if err then
+    vim.notify("Error getting incoming calls: " .. err, vim.log.levels.ERROR)
+    incoming_call_done()
+    return
+  end
+  if not result then
+    vim.notify("No incoming calls found, result is nil", vim.log.levels.WARN)
+    incoming_call_done()
+    return
+  end
+
+  local from_node = my_ctx.from_node
+  local depth = my_ctx.depth
+  if #result == 0 then
+    incoming_call_done()
+    return
+  end
+
+  -- we have results, genrate node
+  local Node = require("call_graph.class.node")
+  local nodes = {}
+  for _, call in ipairs(result) do
+    local node_text = call.from.name
+    local node_pos = call.from.range.start
+    local from_uri = call.from.uri
+    local node = Node:new(node_text, {
+      params = {
+        textDocument = {
+          uri = from_uri,
+        },
+        position = node_pos
+      }
+    })
+    table.insert(from_node.children, node)
+  end
+  -- for caller, call generate agian until depth is deep enough
+  -- if depth < 3 then
+  for _, child in ipairs(from_node.children) do
+    M.pending_request = M.pending_request + 1
+    genrate_call_graph_from_node(child, depth + 1)
+  end
+  -- end
+  incoming_call_done()
+end
+
+local function find_buf_client()
   local bufnr = vim.api.nvim_get_current_buf()
   local clients = vim.lsp.get_clients({ bufnr = bufnr })
   if #clients == 0 then
@@ -58,18 +90,17 @@ function M._find_buf_client()
   return client
 end
 
-function M.generate_call_graph()
+---@param node Node
+---@param depth integer
+genrate_call_graph_from_node = function(node, depth)
   -- find client
-  local client = M._find_buf_client()
+  local client = find_buf_client()
   if client == nil then
     vim.notify("No LSP client found", vim.log.levels.WARN)
     return
   end
-  -- do requset
-  local bufnr = vim.api.nvim_get_current_buf()
-  local pos = vim.lsp.util.make_position_params()
   -- convert posistion to callHierarchy item
-  client.request("textDocument/prepareCallHierarchy", pos, function(err, result, ctx)
+  client.request("textDocument/prepareCallHierarchy", node.attr.params, function(err, result, ctx)
     if err then
       vim.notify("Error preparing call hierarchy: " .. err, vim.log.levels.ERROR)
       return
@@ -80,8 +111,29 @@ function M.generate_call_graph()
     end
     local item = result[1]
     client.request("callHierarchy/incomingCalls", { item = item },
-      M._incoming_call_handler, bufnr)
-  end, bufnr)
+      function(err, result, ctx)
+        incoming_call_handler(ress, result, ctx, {
+          depth = depth,
+          from_node = node
+        })
+      end
+    )
+  end)
+end
+
+function M.generate_call_graph()
+  if M.pending_request ~= 0 then
+    vim.notify("Pending request is not finished, please wait", vim.log.levels.WARN)
+    return
+  end
+  local params = vim.lsp.util.make_position_params()
+  local Node = require("call_graph.class.node")
+  local root_text = vim.fn.expand("<cword>")
+  M.root_node = Node:new(root_text, {
+    params = params
+  })
+  M.pending_request = M.pending_request + 1
+  genrate_call_graph_from_node(M.root_node, 1)
 end
 
 return M
