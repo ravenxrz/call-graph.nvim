@@ -1,7 +1,7 @@
 -- plugin.lua
 local M = {}
 
-function M._create_user_cmd()
+local function create_user_cmd()
   vim.api.nvim_create_user_command(
     "CallGraph",
     function()
@@ -12,7 +12,7 @@ function M._create_user_cmd()
 end
 
 function M.setup()
-  M._create_user_cmd()
+  create_user_cmd()
 end
 
 

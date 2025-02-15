@@ -22,16 +22,15 @@ function M._incoming_call_handler(err, result, ctx)
   -- end
   -- P(lines)
 
-  print("test..")
   local bufid = vim.api.nvim_create_buf(true, true)
   local drawer = require("call_graph.drawer")
   local node = require("call_graph.class.node")
   -- local edge = require("call_graph.class.edge")
   -- local file_pos = require("call_graph.class.file_pos")
   local graph = drawer:new(bufid)
-  local node1 = node:new("main", {})
-  local node2 = node:new("run1fjlsjfljsdlfjlsajfljablwr12ree", {})
-  local node3 = node:new("run2fjxxx", {})
+  local node1 = node:new("node1", {})
+  local node2 = node:new("node2", {})
+  local node3 = node:new("node3", {})
 
   node1.children = { node2, node3 }
   node2.children = { node3 }
