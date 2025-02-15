@@ -45,14 +45,14 @@ local function ensure_buffer_line_has_cols(self, line, required_col)
   end
 end
 
-local function draw_node(self, node, row, col)
+local function draw_node(self, node, row, col, level)
   if self.node_positions[node.nodeid] then -- drawed before
     return
   end
   ensure_buffer_has_lines(self, row + 1)
   ensure_buffer_line_has_cols(self, row, col + #node.text)
   vim.api.nvim_buf_set_text(self.bufnr, row, col, row, col + #node.text, { node.text })
-  self.node_positions[node.nodeid] = { row = row, col = col }
+  self.node_positions[node.nodeid] = { row = row, col = col, level = level }
 end
 
 
@@ -108,13 +108,10 @@ local function draw_h_line(self, row, start_col, end_col, direction)
   vim.api.nvim_buf_set_text(self.bufnr, row, start_col, row, end_col, { fill })
 end
 
-local function draw_edge(self, lhs, rhs)
+local function draw_edge(self, lhs, rhs, lhs_level_max_col)
   local lhs_pos = self.node_positions[lhs.nodeid]
   local rhs_pos = self.node_positions[rhs.nodeid]
-  if lhs_pos.col > rhs_pos.col then
-    lhs, rhs = rhs, lhs
-    lhs_pos, rhs_pos = rhs_pos, lhs_pos
-  end
+  assert(lhs_pos.col <= rhs_pos.col, string.format("lhs_col: %d, rhs_col: %d", lhs_pos.col, rhs_pos.col))
   local fill_start_col = 0
   local fill_start_row = 0
   local fill_end_col = 0
@@ -144,7 +141,7 @@ local function draw_edge(self, lhs, rhs)
     -- 处理不同行不同列的情况：绘制L型连线
     local lhs_end_col = lhs_pos.col + #lhs.text
     local rhs_start_col = rhs_pos.col
-    local mid_col = math.floor((lhs_end_col + rhs_start_col) / 2)
+    local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1)
 
     -- 绘制lhs到中间列的水平线
     if mid_col > lhs_end_col then
@@ -172,7 +169,7 @@ function GraphDrawer:draw(root_node)
   local queue = { { node = root_node, level = 1 } } -- for bfs
   local cur_level = 1
   local cur_level_nodes = {}
-  local cur_level_max_width = 0
+  local cur_level_max_col = {}
   local cur_row = 0
   local cur_col = 0
   assert(self.col_spacing >= 5)
@@ -193,17 +190,17 @@ function GraphDrawer:draw(root_node)
     if cur_level ~= node_level then
       -- draw pre level nodes
       for _, n in ipairs(cur_level_nodes) do
-        draw_node(self, n.node, n.row, n.col)
+        draw_node(self, n.node, n.row, n.col, cur_level)
       end
       -- update this level position
       cur_row = 0
-      cur_col = cur_col + self.col_spacing + cur_level_max_width
+      cur_col = self.col_spacing + cur_level_max_col[cur_level]
       cur_level = node_level
-      cur_level_max_width = #cur_node.text
+      cur_level_max_col[cur_level] = cur_col + #cur_node.text
       cur_level_nodes = { { node = cur_node, level = node_level, row = cur_row, col = cur_col } }
     else
       table.insert(cur_level_nodes, { node = cur_node, level = node_level, row = cur_row, col = cur_col })
-      cur_level_max_width = math.max(cur_level_max_width, #cur_node.text)
+      cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + #cur_node.text)
     end
     cur_row = cur_row + self.row_spacing
 
@@ -224,8 +221,9 @@ function GraphDrawer:draw(root_node)
   local function traverse(node)
     for _, child in ipairs(node.children) do
       if not drawed[child.nodeid] then
-        drawed[child.nodeid] = true
-        draw_edge(self, node, child)
+        drawed[node.nodeid] = true
+        local level = self.node_positions[node.nodeid].level
+        draw_edge(self, node, child, cur_level_max_col[level])
         traverse(child)
       end
     end
@@ -234,3 +232,4 @@ function GraphDrawer:draw(root_node)
 end
 
 return GraphDrawer
+
