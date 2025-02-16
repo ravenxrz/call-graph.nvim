@@ -1,8 +1,6 @@
 local GraphDrawer = {}
 
 local log = require("call_graph.utils.log")
-local GraphNode = require("call_graph.class.graph_node")
-
 ---@class GraphDrawer
 -- Module for drawing graphs in Neovim buffers.
 --- Creates a new GraphDrawer instance.

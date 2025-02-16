@@ -2,7 +2,7 @@ local M = {
   --- @type FuncNode
   root_node = nil,
   nodes = {}, ---@type { [node_key: string] : GraphNode }, record the generated node to dedup
-  parsed_nodes = {}, -- record which node has been called generate call graph
+  parsed_nodes = {}, -- record the node has been called generate call graph
   buf = {
     bufid = -1,
     graph = nil
@@ -13,6 +13,8 @@ local M = {
 local log = require("call_graph.utils.log")
 local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
+local BufGotoEvent = require("call_graph.utils.buf_goto_event")
+
 
 local genrate_call_graph_from_node
 
@@ -58,10 +60,52 @@ local function make_graph_node(node_text, attr)
   return graph_node
 end
 
+local function find_overlaps_nodes(row, col)
+  local overlaps_nodes = {}
+  for k, node in pairs(M.nodes) do
+    if node.row == row and node.col <= col and col <= node.col + #node.text then
+      table.insert(overlaps_nodes, node)
+    end
+  end
+  return overlaps_nodes
+end
+
+local function jumpto(pos_params)
+  local uri = pos_params.textDocument.uri
+  local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+  local character = pos_params.position.character -- Neovim 的列号从 1 开始
+  -- 将 URI 转换为文件路径
+  local file_path = vim.uri_to_fname(uri)
+  -- 打开文件
+  vim.cmd("edit " .. file_path)
+  -- 跳转到指定位置
+  vim.api.nvim_win_set_cursor(0, { line, character })
+end
+
+
+---@param row integer
+---@param col integer
+local function goto_event_cb(row, col)
+  log.info("user press", row, col)
+  local overlaps_nodes = find_overlaps_nodes(row, col)
+  if #overlaps_nodes ~= 0 then -- find node
+    local target_node
+    if #overlaps_nodes ~= 1 then
+      log.warn("find overlaps nodes num is not 1, use the first node as default")
+    end
+    target_node = overlaps_nodes[1]
+    local fnode = target_node.usr_data
+    local params = fnode.attr.params
+    jumpto(params)
+    return
+  end
+end
+
 local function draw()
   local Drawer = require("call_graph.drawer")
   if M.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(M.buf.bufid) then
     M.buf.bufid = vim.api.nvim_create_buf(true, true)
+    BufGotoEvent.setup_buffer(M.buf.bufid, goto_event_cb, "gd")
     M.buf.graph = Drawer:new(M.buf.bufid)
   end
   log.info("genrate graph of", M.root_node.text, "has child num", #M.root_node.children)
@@ -176,7 +220,7 @@ genrate_call_graph_from_node = function(gnode, depth)
       log.warn("Error preparing call hierarchy: " .. err.message, "call info", fnode.node_key)
       local uri = fnode.attr.params.textDocument.uri
       local file_path = vim.uri_to_fname(uri)
-      vim.cmd("e ".. file_path)
+      vim.cmd("e " .. file_path)
       return
     end
     if not result or #result == 0 then
@@ -223,4 +267,3 @@ function M.generate_call_graph()
 end
 
 return M
-
