@@ -108,7 +108,7 @@ local function draw_h_line(self, row, start_col, end_col, direction)
   vim.api.nvim_buf_set_text(self.bufnr, row, start_col, row, end_col, { fill })
 end
 
-local function draw_edge(self, lhs, rhs, lhs_level_max_col)
+local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   assert(lhs.col <= rhs.col, string.format("lhs.col: %d, rhs.col: %d", lhs.col, rhs.col))
   local fill_start_col = 0
   local fill_start_row = 0
@@ -117,16 +117,24 @@ local function draw_edge(self, lhs, rhs, lhs_level_max_col)
 
   -- 是否是同一行
   if lhs.row == rhs.row then
-    draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
+    if point_to_lhs then
+      draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
+    else
+      draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.RIGHT)
+    end
     return
   end
 
   --是否是同一列
   if lhs.col == rhs.col then
-    draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
+    assert(lhs.row ~= rhs.row, "lhs.row: %d, rhs.row: %d", lhs.row, rhs.row)
+    if lhs.row < rhs.row then
+      draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
+    else
+      draw_v_line(self, rhs.row - 1, lhs.row, lhs.col, Direction.DOWN)
+    end
     return
   end
-
 
   -- 处理不同行不同列的情况：绘制L型连线
   local lhs_end_col = lhs.col + #lhs.text
@@ -134,23 +142,41 @@ local function draw_edge(self, lhs, rhs, lhs_level_max_col)
   local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1)
 
   -- 绘制lhs到中间列的水平线
-  if mid_col > lhs_end_col then
+  assert(mid_col > lhs_end_col,string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
+  if point_to_lhs then
+    log.debug(string.format(
+      "draw h line from lhs to mid col, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
+      rhs.text,
+      lhs.row, lhs_end_col, mid_col))
     draw_h_line(self, lhs.row, lhs_end_col, mid_col, Direction.LEFT)
+  else
+    log.debug(string.format(
+      "draw h line from lhs to mid col (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs
+      .text,
+      lhs.row, lhs_end_col, mid_col))
+    draw_h_line(self, lhs.row, lhs_end_col, mid_col)
   end
 
   -- 绘制中间列的垂直线
-  local v_start = lhs.row + 1
-  local v_end = rhs.row
-  if v_end > v_start then
-    draw_v_line(self, v_start, v_end, mid_col)
-  elseif v_end < v_start then
-    -- 处理子节点在父节点上方的情况
-    draw_v_line(self, v_end, v_start, mid_col)
-  end
+  local v_start = math.min(lhs.row, rhs.row)
+  local v_end = math.max(lhs.row, rhs.row)
+  assert(v_start ~= v_end, "v_start: %d, v_end: %d", v_start, v_end)
+  draw_v_line(self, v_start + 1, v_end, mid_col)
 
   -- 绘制中间列到rhs左侧的水平线
-  if rhs_start_col > mid_col then
+  assert(mid_col < rhs_start_col, string.format("mid_col: %d, rhs_start_col: %d", mid_col, rhs_start_col))
+  if point_to_lhs then
+    log.debug(vim.inspect((lhs)))
+    log.debug(vim.inspect((rhs)))
+    log.debug(string.format(
+    "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
+      rhs.row, mid_col, rhs_start_col))
     draw_h_line(self, rhs.row, mid_col, rhs_start_col)
+  else
+    log.debug(string.format(
+    "draw h line from mid col to rhs, (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
+      rhs.row, mid_col, rhs_start_col))
+    draw_h_line(self, rhs.row, mid_col, rhs_start_col, Direction.RIGHT)
   end
 end
 
@@ -168,7 +194,6 @@ function GraphDrawer:draw(root_node)
   -- 第一轮：绘制所有节点
   local added = {}
   added[root_node.nodeid] = true
-  ::continue::
   while #queue > 0 do
     local current = table.remove(queue, 1)
 
@@ -215,7 +240,11 @@ function GraphDrawer:draw(root_node)
         log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
           "draw edge between", node.text, child.text,
           string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
-        draw_edge(self, node, child, cur_level_max_col[node.level]) -- 环图只绘制一条边
+        if node.col <= child.col then
+          draw_edge(self, node, child, true, cur_level_max_col[node.level])  -- 环图只绘制一条边
+        else
+          draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
+        end
         traverse(child)
       end
     end
@@ -225,3 +254,4 @@ function GraphDrawer:draw(root_node)
 end
 
 return GraphDrawer
+

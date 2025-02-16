@@ -95,6 +95,8 @@ local function incoming_call_handler(err, result, _, my_ctx)
     return
   end
 
+  log.info("incoming call handler of", from_node.text, "reuslt num", #result)
+
   if #result == 0 then
     gen_call_graph_done()
     return
@@ -157,6 +159,8 @@ genrate_call_graph_from_node = function(gnode, depth)
   assert(not is_parsed_node_exsit(fnode.node_key), "node already parsed")
   regist_parsed_node(fnode.node_key, gnode)
 
+  log.info("generate call graph of node", gnode.text)
+
   -- find client
   local client = find_buf_client()
   if client == nil then
@@ -170,6 +174,9 @@ genrate_call_graph_from_node = function(gnode, depth)
     if err then
       gen_call_graph_done()
       log.warn("Error preparing call hierarchy: " .. err.message, "call info", fnode.node_key)
+      local uri = fnode.attr.params.textDocument.uri
+      local file_path = vim.uri_to_fname(uri)
+      vim.cmd("e ".. file_path)
       return
     end
     if not result or #result == 0 then
@@ -216,3 +223,4 @@ function M.generate_call_graph()
 end
 
 return M
+
