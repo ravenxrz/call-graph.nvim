@@ -4,7 +4,7 @@ InComingCall.__index = InComingCall
 local log = require("call_graph.utils.log")
 local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
-local BufGotoEvent = require("call_graph.utils.buf_goto_event")
+local Events = require("call_graph.utils.events")
 -- local Edge = require("call_graph.class.edge")
 
 function InComingCall:new()
@@ -18,10 +18,26 @@ function InComingCall:new()
     graph = nil
   }
   o.pending_request = 0
+  o.namespace_id = vim.api.nvim_create_namespace('call_graph_hl') -- for highlight
+  o.last_cursor_hold_node = nil
   return o
 end
 
 local genrate_call_graph_from_node
+
+---@param edge Edge
+local function hl_edge(self, edge)
+  for _, sub_edge in pairs(edge.sub_edges) do
+    -- hl by line
+    for i = sub_edge.start_row, sub_edge.end_row do
+      local r = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.namespace_id, i, sub_edge.start_col, {
+        end_row = i,
+        end_col = sub_edge.end_col,
+        hl_group = "MyHighlight"
+      })
+    end
+  end
+end
 
 local function make_node_key(uri, line, func_name)
   local file_path = vim.uri_to_fname(uri)
@@ -65,10 +81,14 @@ local function make_graph_node(node_text, attr)
   return graph_node
 end
 
+local function overlap_node(row, col, node)
+    return node.row == row and node.col <= col and col < node.col + #node.text
+end
+
 local function find_overlaps_nodes(self, row, col)
   local overlaps_nodes = {}
   for _, node in pairs(self.nodes) do
-    if node.row == row and node.col <= col and col < node.col + #node.text then
+    if overlap_node(row, col, node) then
       table.insert(overlaps_nodes, node)
     end
   end
@@ -154,6 +174,32 @@ local function goto_event_cb(row, col, ctx)
   end
 end
 
+
+local function cursor_hold_cb(row, col, ctx)
+  local self = ctx
+  if self.last_cursor_hold_node ~= nil and overlap_node(row, col, self.last_cursor_hold_node) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
+  assert(self ~= nil, "")
+  local overlaps_nodes = find_overlaps_nodes(self, row, col)
+  if #overlaps_nodes ~= 0 then -- find node
+    if #overlaps_nodes ~= 1 then
+      log.warn("find overlaps nodes num is not 1, use the first node as default")
+    end
+    local target_node = overlaps_nodes[1]
+    self.last_cursor_hold_node = target_node
+    -- hl incoming
+    for _, edge in pairs(target_node.incoming_edges) do
+      hl_edge(self, edge)
+    end
+    -- hl outcoming
+    for _, edge in pairs(target_node.outcoming_edges) do
+      hl_edge(self, edge)
+    end
+  end
+end
+
 ---@param edge Edge
 local function draw_edge_cb(edge, ctx)
   local self = ctx -- TODO: fix this
@@ -164,6 +210,9 @@ local function draw_edge_cb(edge, ctx)
       sub_edge.end_col)
     if self.edges[tostring(edge.edgeid)] == nil then
       self.edges[tostring(edge.edgeid)] = edge
+      -- update node edges info
+      table.insert(edge.from_node.outcoming_edges, edge)
+      table.insert(edge.to_node.incoming_edges, edge)
       break
     end
   end
@@ -173,7 +222,8 @@ local function draw(self)
   local Drawer = require("call_graph.drawer")
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
-    BufGotoEvent.setup_buffer(self.buf.bufid, goto_event_cb, self, "gd")
+    Events.setup_buffer_press_cursor_cb(self.buf.bufid, goto_event_cb, self, "gd")
+    Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
     self.buf.graph = Drawer:new(self.buf.bufid)
   end
   log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)

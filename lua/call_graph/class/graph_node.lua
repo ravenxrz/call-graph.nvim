@@ -9,8 +9,10 @@ function GraphNode:new(node_text, usr_data)
   local n = {
     nodeid = self.nodeid,
     text = node_text,
-    parent = {},   -- this node calls who?   table of |call_pos_params(TextDocumentPositionParams), GraphNode|
-    children = {}, -- who calls this node?   table of GraphNode
+    parent = {},  ---@type table<GraphNode> -- this node calls who?   table of |call_pos_params(TextDocumentPositionParams), GraphNode|
+    children = {}, ---@type table<GraphNode> -- who calls this node?   table of GraphNode
+    incoming_edges = {}, ---@type table<Edge>
+    outcoming_edges = {}, ---@type table<Edge>
     level = 1,
     row = 0,
     col = 0,

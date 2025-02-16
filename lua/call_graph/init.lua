@@ -19,9 +19,15 @@ local function create_user_cmd()
     , { desc = "Open call graph log file" })
 end
 
+local function create_hl_group()
+  vim.api.nvim_command('highlight MyHighlight guifg=#ff0000 guibg=#000000 gui=bold')
+end
+
 function M.setup()
   -- setup logs
   log.setup({ append = false, level = "info" })
+  -- create_hl_group
+  create_hl_group()
   -- create the command
   create_user_cmd()
 end
