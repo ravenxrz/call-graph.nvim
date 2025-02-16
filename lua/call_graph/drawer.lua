@@ -189,7 +189,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   -- 处理不同行不同列的情况：绘制L型连线
   local lhs_end_col = lhs.col + #lhs.text
   local rhs_start_col = rhs.col
-  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col) + 1
+  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1) + 1
 
   -- 绘制lhs到中间列的水平线
   assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
