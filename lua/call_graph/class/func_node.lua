@@ -3,7 +3,7 @@ local FuncNode = {
 }
 FuncNode.__index = FuncNode
 
----@param text string
+---@param node_key string
 ---@param attr table
 ---@return FuncNode
 function FuncNode:new(node_key, attr)

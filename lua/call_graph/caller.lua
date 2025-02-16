@@ -3,6 +3,7 @@ local M = {
   root_node = nil,
   nodes = {}, ---@type { [node_key: string] : GraphNode }, record the generated node to dedup
   parsed_nodes = {}, -- record the node has been called generate call graph
+  edges = {}, ---@type { [edge_id: integer] :  Edge}
   buf = {
     bufid = -1,
     graph = nil
@@ -14,6 +15,7 @@ local log = require("call_graph.utils.log")
 local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
 local BufGotoEvent = require("call_graph.utils.buf_goto_event")
+local Edge = require("call_graph.class.edge")
 
 
 local genrate_call_graph_from_node
@@ -63,12 +65,31 @@ end
 local function find_overlaps_nodes(row, col)
   local overlaps_nodes = {}
   for k, node in pairs(M.nodes) do
-    if node.row == row and node.col <= col and col <= node.col + #node.text then
+    if node.row == row and node.col <= col and col < node.col + #node.text then
       table.insert(overlaps_nodes, node)
     end
   end
   return overlaps_nodes
 end
+
+local function find_overlaps_edges(row, col)
+  local overlaps_edges = {}
+  for _, edge in pairs(M.edges) do
+    for _, sub_edge in ipairs(edge.sub_edges) do
+      if row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col then
+        table.insert(overlaps_edges, edge)
+        break
+      else
+        if col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row then
+          table.insert(overlaps_edges, edge)
+          break
+        end
+      end
+    end
+  end
+  return overlaps_edges
+end
+
 
 local function jumpto(pos_params)
   local uri = pos_params.textDocument.uri
@@ -86,18 +107,58 @@ end
 ---@param row integer
 ---@param col integer
 local function goto_event_cb(row, col)
-  log.info("user press", row, col)
+  log.debug("user press", row, col)
+
+  -- overlap with nodes?
+  log.debug("compare node")
   local overlaps_nodes = find_overlaps_nodes(row, col)
   if #overlaps_nodes ~= 0 then -- find node
-    local target_node
     if #overlaps_nodes ~= 1 then
+      -- todo(zhangxingrui): 超过1个node，由用户选择
       log.warn("find overlaps nodes num is not 1, use the first node as default")
     end
-    target_node = overlaps_nodes[1]
+    local target_node = overlaps_nodes[1]
     local fnode = target_node.usr_data
     local params = fnode.attr.params
+    log.debug("pos overlaps with node", target_node.text)
     jumpto(params)
     return
+  end
+
+  -- overlap with edges?
+  log.debug("compare edge", vim.inspect(M.edges))
+  local overlaps_edges = find_overlaps_edges(row, col)
+  if #overlaps_edges ~= 0 then
+    if #overlaps_edges ~= 1 then
+      -- todo(zhangxingrui): 超过1个edge，由用户选择
+      log.warn("find overlaps edges num is", #overlaps_edges, "use the first edge as default")
+      -- log.info("all overlaps edges", vim.inspect(overlaps_edges))
+    end
+    local target_edge = overlaps_edges[1]
+    log.debug(string.format("pos overlaps with edge [%s->%s]", target_edge.from_node.text, target_edge.to_node.text))
+    for _, p in ipairs(target_edge.from_node.parent) do
+      if p.node.nodeid == target_edge.to_node.nodeid then
+        if p.call_pos_params.position == nil then
+          vim.notify("find the overlaps edge, but no position info provided", vim.log.levels.WARN)
+        else
+          jumpto(p.call_pos_params)
+        end
+        break
+      end
+    end
+  end
+end
+
+---@param edge Edge
+local function draw_edge_cb(edge)
+  log.debug("from node", edge.from_node.text, "to node", edge.to_node.text)
+  for _, sub_edge in ipairs(edge.sub_edges) do
+    log.debug("edge id", edge.edgeid, "sub edge", sub_edge.start_row, sub_edge.start_col, sub_edge.end_row,
+      sub_edge.end_col)
+    if M.edges[tostring(edge.edgeid)] == nil then
+      M.edges[tostring(edge.edgeid)] = edge
+      break
+    end
   end
 end
 
@@ -109,10 +170,8 @@ local function draw()
     M.buf.graph = Drawer:new(M.buf.bufid)
   end
   log.info("genrate graph of", M.root_node.text, "has child num", #M.root_node.children)
-  for i, node in ipairs(M.root_node.children) do
-    log.debug("child", i, node.text)
-  end
-  M.buf.graph:draw(M.root_node)
+  M.buf.graph.draw_edge_cb = draw_edge_cb
+  M.buf.graph:draw(M.root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
   vim.api.nvim_set_current_buf(M.buf.bufid)
 end
 
@@ -125,6 +184,7 @@ end
 
 -- 该接口为异步回调
 -- TODO(zhangxingrui): 是否会有并发问题？不熟悉lua和nvim的线程模型是啥样的
+-- Answer: 查了下，nvim是单线程模型，所以没有并发问题
 local function incoming_call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local depth = my_ctx.depth
@@ -147,9 +207,26 @@ local function incoming_call_handler(err, result, _, my_ctx)
   end
 
   -- we have results, genrate node
+  local fnode = from_node.usr_data
   for _, call in ipairs(result) do
     local from_uri = call.from.uri
     local node_pos = call.from.range.start
+    local call_pos_params
+    if #call.fromRanges == 0 then
+      call_pos_params = {
+        position = nil,
+        textDocument = {
+          uri = from_uri,
+        }
+      }
+    else
+      call_pos_params = {
+        position = call.fromRanges[1].start,
+        textDocument = {
+          uri = from_uri,
+        }
+      }
+    end
     local node_text = make_node_key(from_uri, node_pos.line, call.from.name)
     local node
     if is_node_exist(node_text) then
@@ -165,6 +242,7 @@ local function incoming_call_handler(err, result, _, my_ctx)
       })
       regist_node(node_text, node)
     end
+    table.insert(node.parent, { call_pos_params = call_pos_params, node = from_node })
     table.insert(from_node.children, node)
   end
   -- for caller, call generate agian until depth is deep enough
@@ -204,11 +282,10 @@ genrate_call_graph_from_node = function(gnode, depth)
   regist_parsed_node(fnode.node_key, gnode)
 
   log.info("generate call graph of node", gnode.text)
-
   -- find client
   local client = find_buf_client()
   if client == nil then
-    vim.notify("No LSP client found", vim.log.levels.WARN)
+    vim.notify("No LSP client found or current lsp does not support this operation", vim.log.levels.WARN)
     gen_call_graph_done()
     return
   end
@@ -248,6 +325,7 @@ local function reset_graph()
   }
   M.nodes = {}
   M.parsed_nodes = {}
+  M.edges = {}
 end
 
 function M.generate_call_graph()

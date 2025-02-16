@@ -11,7 +11,8 @@ function GraphNode:new(node_text, usr_data)
   n = {
     nodeid = self.nodeid,
     text = node_text,
-    children = {},
+    parent = {},   -- this node calls who?   table of |call_pos_params(TextDocumentPositionParams), GraphNode|
+    children = {}, -- who calls this node?   table of GraphNode
     level = 1,
     row = 0,
     col = 0,
