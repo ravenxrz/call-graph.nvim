@@ -70,19 +70,27 @@ local Direction = {
 --- @param direction string, which direction
 local function draw_v_line(self, start_row, end_row, col, direction)
   assert(start_row <= end_row, string.format("start_row: %d, end_row: %d", start_row, end_row))
+
   ensure_buffer_has_lines(self, end_row)
 
   for line = start_row, end_row - 1 do
     ensure_buffer_line_has_cols(self, line, col + 1)
 
-    -- 处理箭头样式
-    local fill = "|"
-    if direction == Direction.UP and line == start_row then
-      fill = "^"
-    elseif direction == Direction.DOWN and line == end_row - 1 then
-      fill = "v"
+    -- 获取当前行的文本
+    local current_line = vim.api.nvim_buf_get_lines(self.bufnr, line, line + 1, false)[1] or ""
+    local current_char = string.sub(current_line, col + 1, col + 1) or ""
+
+    -- 只有当当前字符为空字符串时才进行覆盖
+    if current_char == " " or current_char == '|' then
+      -- 处理箭头样式
+      local fill = "|"
+      if direction == Direction.UP and line == start_row then
+        fill = "^"
+      elseif direction == Direction.DOWN and line == end_row - 1 then
+        fill = "v"
+      end
+      vim.api.nvim_buf_set_text(self.bufnr, line, col, line, col + 1, { fill })
     end
-    vim.api.nvim_buf_set_text(self.bufnr, line, col, line, col + 1, { fill })
   end
 end
 
@@ -92,19 +100,32 @@ end
 --- @param direction string, which direction
 local function draw_h_line(self, row, start_col, end_col, direction)
   assert(start_col <= end_col, string.format("start_col: %d, end_col: %d", start_col, end_col))
+
   local length = end_col - start_col
   if length <= 0 then return end
 
   ensure_buffer_has_lines(self, row + 1)
   ensure_buffer_line_has_cols(self, row, end_col)
-  local fill
-  if direction == Direction.LEFT then
-    fill = "<" .. string.rep("-", math.max(length - 1, 0))
-  elseif direction == Direction.RIGHT then
-    fill = string.rep("-", math.max(length - 1, 0)) .. ">"
-  else
-    fill = string.rep("-", length)
+
+  -- 获取当前行的文本
+  local current_line = vim.api.nvim_buf_get_lines(self.bufnr, row, row + 1, false)[1] or ""
+  local fill_table = {}
+  for i = start_col, end_col - 1 do
+    local current_char = string.sub(current_line, i + 1, i + 1) or ""
+    if current_char == " " or current_char == "-" then
+      local fill = "-"
+      if direction == Direction.LEFT and i == start_col then
+        fill = "<"
+      elseif direction == Direction.RIGHT and i == end_col - 1 then
+        fill = ">"
+      end
+      table.insert(fill_table, fill)
+    else
+      table.insert(fill_table, current_char) -- 保留当前字符
+    end
   end
+
+  local fill = table.concat(fill_table)
   vim.api.nvim_buf_set_text(self.bufnr, row, start_col, row, end_col, { fill })
 end
 
@@ -131,7 +152,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
     if lhs.row < rhs.row then
       draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
     else
-      draw_v_line(self, rhs.row - 1, lhs.row, lhs.col, Direction.DOWN)
+      draw_v_line(self, rhs.row - 1, lhs.row + 1, lhs.col, Direction.DOWN)
     end
     return
   end
@@ -142,7 +163,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1)
 
   -- 绘制lhs到中间列的水平线
-  assert(mid_col > lhs_end_col,string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
+  assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
   if point_to_lhs then
     log.debug(string.format(
       "draw h line from lhs to mid col, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
@@ -169,12 +190,14 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
     log.debug(vim.inspect((lhs)))
     log.debug(vim.inspect((rhs)))
     log.debug(string.format(
-    "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
+      "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
+      rhs.text,
       rhs.row, mid_col, rhs_start_col))
     draw_h_line(self, rhs.row, mid_col, rhs_start_col)
   else
     log.debug(string.format(
-    "draw h line from mid col to rhs, (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
+      "draw h line from mid col to rhs, (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
+      rhs.text,
       rhs.row, mid_col, rhs_start_col))
     draw_h_line(self, rhs.row, mid_col, rhs_start_col, Direction.RIGHT)
   end
@@ -241,7 +264,7 @@ function GraphDrawer:draw(root_node)
           "draw edge between", node.text, child.text,
           string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
         if node.col <= child.col then
-          draw_edge(self, node, child, true, cur_level_max_col[node.level])  -- 环图只绘制一条边
+          draw_edge(self, node, child, true, cur_level_max_col[node.level])   -- 环图只绘制一条边
         else
           draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
         end
