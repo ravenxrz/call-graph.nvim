@@ -157,7 +157,6 @@ end
 ---
 ---@param root_node GraphNode
 function GraphDrawer:draw(root_node)
-  log.debug("graph info", table2str(root_node))
   local queue = { root_node } -- for bfs
   local cur_level = 1
   local cur_level_nodes = {}

@@ -84,7 +84,6 @@ end
 local function incoming_call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local depth = my_ctx.depth
-  log.debug("incoming from node", table2str(from_node))
   if err then
     vim.notify("Error getting incoming calls: " .. err.message, vim.log.levels.ERROR)
     gen_call_graph_done()
@@ -122,7 +121,6 @@ local function incoming_call_handler(err, result, _, my_ctx)
     end
     table.insert(from_node.children, node)
   end
-  log.debug("incoming call of", from_node.text, "has child", table2str(from_node.children))
   -- for caller, call generate agian until depth is deep enough
   -- if depth < 3 then
   for _, child in ipairs(from_node.children) do
@@ -166,8 +164,6 @@ genrate_call_graph_from_node = function(gnode, depth)
     gen_call_graph_done()
     return
   end
-
-  log.debug("client request", table2str(gnode))
 
   -- convert posistion to callHierarchy item
   client.request("textDocument/prepareCallHierarchy", fnode.attr.params, function(err, result, ctx)
