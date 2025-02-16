@@ -2,11 +2,9 @@
 local SubEdge = {
   sub_edgeid = 1
 }
-SubEdge.__index = SubEdge
 
 function SubEdge:new(start_row, start_col, end_row, end_col)
-  local e = setmetatable({}, SubEdge)
-  e = {
+  local e = {
     start_row = start_row,
     start_col = start_col,
     end_row = end_row,

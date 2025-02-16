@@ -6,7 +6,8 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command(
     "CallGraph",
     function()
-      require("call_graph.caller").generate_call_graph()
+      local incoming_caller = require("call_graph.caller"):new()
+      incoming_caller:generate_call_graph()
     end,
     { desc = "Generate call graph for current buffer" }
   )
@@ -20,7 +21,7 @@ end
 
 function M.setup()
   -- setup logs
-  log.setup({ append = false, level = "debug" })
+  log.setup({ append = false, level = "info" })
   -- create the command
   create_user_cmd()
 end

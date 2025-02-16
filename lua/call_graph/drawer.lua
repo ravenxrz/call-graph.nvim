@@ -13,7 +13,7 @@ function GraphDrawer:new(bufnr)
     bufnr = bufnr,
     row_spacing = 3,
     col_spacing = 5,
-    draw_edge_cb = nil
+    draw_edge_cb = nil --- @type table {cb = func, cb_ctx: any}
   }
   setmetatable(g, { __index = GraphDrawer })
   return g
@@ -134,7 +134,7 @@ end
 local function call_draw_edge_cb(self, from_node, to_node, sub_edges)
   if self.draw_edge_cb ~= nil then
     local edge = Edge:new(from_node, to_node, sub_edges)
-    self.draw_edge_cb(edge)
+    self.draw_edge_cb.cb(edge, self.draw_edge_cb.cb_ctx)
   end
 end
 

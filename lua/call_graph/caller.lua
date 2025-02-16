@@ -1,22 +1,25 @@
-local M = {
-  --- @type FuncNode
-  root_node = nil,
-  nodes = {}, ---@type { [node_key: string] : GraphNode }, record the generated node to dedup
-  parsed_nodes = {}, -- record the node has been called generate call graph
-  edges = {}, ---@type { [edge_id: integer] :  Edge}
-  buf = {
-    bufid = -1,
-    graph = nil
-  },
-  pending_request = 0
-}
+local InComingCall = {}
+InComingCall.__index = InComingCall
 
 local log = require("call_graph.utils.log")
 local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
 local BufGotoEvent = require("call_graph.utils.buf_goto_event")
-local Edge = require("call_graph.class.edge")
+-- local Edge = require("call_graph.class.edge")
 
+function InComingCall:new()
+  local o = setmetatable({}, InComingCall)
+  o.root_node = nil   --- @type FuncNode
+  o.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
+  o.parsed_nodes = {} -- record the node has been called generate call graph
+  o.edges = {}        --@type { [edge_id: string] :  Edge }
+  o.buf = {
+    bufid = -1,
+    graph = nil
+  }
+  o.pending_request = 0
+  return o
+end
 
 local genrate_call_graph_from_node
 
@@ -29,27 +32,27 @@ end
 
 ---@param node_key string
 ---@return boolean
-local function is_node_exist(node_key)
-  return M.nodes[node_key] ~= nil
+local function is_node_exist(self, node_key)
+  return self.nodes[node_key] ~= nil
 end
 
 ---@param node_key string
 ---@param node GraphNode
-local function regist_node(node_key, node)
-  assert(not is_node_exist(node_key), "node already exist")
-  M.nodes[node_key] = node
+local function regist_node(self, node_key, node)
+  assert(not is_node_exist(self, node_key), "node already exist")
+  self.nodes[node_key] = node
 end
 
 ---@param node_key string
-local function is_parsed_node_exsit(node_key)
-  return M.parsed_nodes[node_key] ~= nil
+local function is_parsed_node_exsit(self, node_key)
+  return self.parsed_nodes[node_key] ~= nil
 end
 
 ---@param node_key string
 ---@param pasred_node GraphNode
-local function regist_parsed_node(node_key, pasred_node)
-  assert(not is_parsed_node_exsit(node_key), "node already exist")
-  M.parsed_nodes[node_key] = pasred_node
+local function regist_parsed_node(self, node_key, pasred_node)
+  assert(not is_parsed_node_exsit(self, node_key), "node already exist")
+  self.parsed_nodes[node_key] = pasred_node
 end
 
 
@@ -62,9 +65,9 @@ local function make_graph_node(node_text, attr)
   return graph_node
 end
 
-local function find_overlaps_nodes(row, col)
+local function find_overlaps_nodes(self, row, col)
   local overlaps_nodes = {}
-  for k, node in pairs(M.nodes) do
+  for _, node in pairs(self.nodes) do
     if node.row == row and node.col <= col and col < node.col + #node.text then
       table.insert(overlaps_nodes, node)
     end
@@ -72,9 +75,9 @@ local function find_overlaps_nodes(row, col)
   return overlaps_nodes
 end
 
-local function find_overlaps_edges(row, col)
+local function find_overlaps_edges(self, row, col)
   local overlaps_edges = {}
-  for _, edge in pairs(M.edges) do
+  for _, edge in pairs(self.edges) do
     for _, sub_edge in ipairs(edge.sub_edges) do
       if row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col then
         table.insert(overlaps_edges, edge)
@@ -106,12 +109,14 @@ end
 
 ---@param row integer
 ---@param col integer
-local function goto_event_cb(row, col)
+local function goto_event_cb(row, col, ctx)
   log.debug("user press", row, col)
+  local self = ctx
+  assert(self ~= nil, "")
 
   -- overlap with nodes?
   log.debug("compare node")
-  local overlaps_nodes = find_overlaps_nodes(row, col)
+  local overlaps_nodes = find_overlaps_nodes(self, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
       -- todo(zhangxingrui): 超过1个node，由用户选择
@@ -126,12 +131,12 @@ local function goto_event_cb(row, col)
   end
 
   -- overlap with edges?
-  log.debug("compare edge", vim.inspect(M.edges))
-  local overlaps_edges = find_overlaps_edges(row, col)
+  log.debug("compare edge", vim.inspect(self.edges))
+  local overlaps_edges = find_overlaps_edges(self, row, col)
   if #overlaps_edges ~= 0 then
     if #overlaps_edges ~= 1 then
       -- todo(zhangxingrui): 超过1个edge，由用户选择
-      log.warn("find overlaps edges num is", #overlaps_edges, "use the first edge as default")
+      log.warn("find overlaps edges num is", #overlaps_edges, ",use the first edge as default")
       -- log.info("all overlaps edges", vim.inspect(overlaps_edges))
     end
     local target_edge = overlaps_edges[1]
@@ -150,35 +155,40 @@ local function goto_event_cb(row, col)
 end
 
 ---@param edge Edge
-local function draw_edge_cb(edge)
+local function draw_edge_cb(edge, ctx)
+  local self = ctx -- TODO: fix this
+  assert(self ~= nil, "")
   log.debug("from node", edge.from_node.text, "to node", edge.to_node.text)
   for _, sub_edge in ipairs(edge.sub_edges) do
     log.debug("edge id", edge.edgeid, "sub edge", sub_edge.start_row, sub_edge.start_col, sub_edge.end_row,
       sub_edge.end_col)
-    if M.edges[tostring(edge.edgeid)] == nil then
-      M.edges[tostring(edge.edgeid)] = edge
+    if self.edges[tostring(edge.edgeid)] == nil then
+      self.edges[tostring(edge.edgeid)] = edge
       break
     end
   end
 end
 
-local function draw()
+local function draw(self)
   local Drawer = require("call_graph.drawer")
-  if M.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(M.buf.bufid) then
-    M.buf.bufid = vim.api.nvim_create_buf(true, true)
-    BufGotoEvent.setup_buffer(M.buf.bufid, goto_event_cb, "gd")
-    M.buf.graph = Drawer:new(M.buf.bufid)
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    self.buf.bufid = vim.api.nvim_create_buf(true, true)
+    BufGotoEvent.setup_buffer(self.buf.bufid, goto_event_cb, self, "gd")
+    self.buf.graph = Drawer:new(self.buf.bufid)
   end
-  log.info("genrate graph of", M.root_node.text, "has child num", #M.root_node.children)
-  M.buf.graph.draw_edge_cb = draw_edge_cb
-  M.buf.graph:draw(M.root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
-  vim.api.nvim_set_current_buf(M.buf.bufid)
+  log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)
+  self.buf.graph.draw_edge_cb = {
+    cb = draw_edge_cb,
+    cb_ctx = self
+  }
+  self.buf.graph:draw(self.root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
+  vim.api.nvim_set_current_buf(self.buf.bufid)
 end
 
-local function gen_call_graph_done()
-  M.pending_request = M.pending_request - 1
-  if M.pending_request == 0 then
-    draw()
+local function gen_call_graph_done(self)
+  self.pending_request = self.pending_request - 1
+  if self.pending_request == 0 then
+    draw(self)
   end
 end
 
@@ -188,21 +198,22 @@ end
 local function incoming_call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local depth = my_ctx.depth
+  local self = my_ctx.self
   if err then
     vim.notify("Error getting incoming calls: " .. err.message, vim.log.levels.ERROR)
-    gen_call_graph_done()
+    gen_call_graph_done(self)
     return
   end
   if not result then
     vim.notify("No incoming calls found, result is nil", vim.log.levels.WARN)
-    gen_call_graph_done()
+    gen_call_graph_done(self)
     return
   end
 
   log.info("incoming call handler of", from_node.text, "reuslt num", #result)
 
   if #result == 0 then
-    gen_call_graph_done()
+    gen_call_graph_done(self)
     return
   end
 
@@ -229,8 +240,8 @@ local function incoming_call_handler(err, result, _, my_ctx)
     end
     local node_text = make_node_key(from_uri, node_pos.line, call.from.name)
     local node
-    if is_node_exist(node_text) then
-      node = M.nodes[node_text]
+    if is_node_exist(self, node_text) then
+      node = self.nodes[node_text]
     else
       node = make_graph_node(node_text, {
         params = {
@@ -240,7 +251,7 @@ local function incoming_call_handler(err, result, _, my_ctx)
           position = node_pos
         }
       })
-      regist_node(node_text, node)
+      regist_node(self, node_text, node)
     end
     table.insert(node.parent, { call_pos_params = call_pos_params, node = from_node })
     table.insert(from_node.children, node)
@@ -248,13 +259,13 @@ local function incoming_call_handler(err, result, _, my_ctx)
   -- for caller, call generate agian until depth is deep enough
   -- if depth < 3 then
   for _, child in ipairs(from_node.children) do
-    if not is_parsed_node_exsit(child.text) then
-      M.pending_request = M.pending_request + 1
-      genrate_call_graph_from_node(child, depth + 1)
+    if not is_parsed_node_exsit(self, child.text) then
+      self.pending_request = self.pending_request + 1
+      genrate_call_graph_from_node(self, child, depth + 1)
     end
   end
   -- end
-  gen_call_graph_done()
+  gen_call_graph_done(self)
 end
 
 local function find_buf_client()
@@ -276,24 +287,24 @@ end
 
 ---@param node GraphNode
 ---@param depth integer
-genrate_call_graph_from_node = function(gnode, depth)
+genrate_call_graph_from_node = function(self, gnode, depth)
   local fnode = gnode.usr_data
-  assert(not is_parsed_node_exsit(fnode.node_key), "node already parsed")
-  regist_parsed_node(fnode.node_key, gnode)
+  assert(not is_parsed_node_exsit(self, fnode.node_key), "node already parsed")
+  regist_parsed_node(self, fnode.node_key, gnode)
 
   log.info("generate call graph of node", gnode.text)
   -- find client
   local client = find_buf_client()
   if client == nil then
     vim.notify("No LSP client found or current lsp does not support this operation", vim.log.levels.WARN)
-    gen_call_graph_done()
+    gen_call_graph_done(self)
     return
   end
 
   -- convert posistion to callHierarchy item
   client.request("textDocument/prepareCallHierarchy", fnode.attr.params, function(err, result, ctx)
     if err then
-      gen_call_graph_done()
+      gen_call_graph_done(self)
       log.warn("Error preparing call hierarchy: " .. err.message, "call info", fnode.node_key)
       local uri = fnode.attr.params.textDocument.uri
       local file_path = vim.uri_to_fname(uri)
@@ -301,7 +312,7 @@ genrate_call_graph_from_node = function(gnode, depth)
       return
     end
     if not result or #result == 0 then
-      gen_call_graph_done()
+      gen_call_graph_done(self)
       vim.notify("No call hierarchy items found", vim.log.levels.WARN)
       return
     end
@@ -310,38 +321,22 @@ genrate_call_graph_from_node = function(gnode, depth)
       function(err, result, ctx)
         incoming_call_handler(err, result, ctx, {
           depth = depth,
-          from_node = gnode
+          from_node = gnode,
+          self = self
         })
       end
     )
   end)
 end
 
-local function reset_graph()
-  M.root_node = nil
-  M.buf = {
-    bufid = -1,
-    graph = nil
-  }
-  M.nodes = {}
-  M.parsed_nodes = {}
-  M.edges = {}
-end
-
-function M.generate_call_graph()
-  if M.pending_request ~= 0 then
-    vim.notify(string.format("Pending request is not finished, please wait, pending request num:%d", M.pending_request),
-      vim.log.levels.WARN)
-    return
-  end
-  reset_graph()
+function InComingCall:generate_call_graph()
   local params = vim.lsp.util.make_position_params()
   local func_name = vim.fn.expand("<cword>")
   local root_text = make_node_key(params.textDocument.uri, params.position.line, func_name)
-  M.root_node = make_graph_node(root_text, { params = params })
-  regist_node(root_text, M.root_node)
-  M.pending_request = M.pending_request + 1
-  genrate_call_graph_from_node(M.root_node, 1)
+  self.root_node = make_graph_node(root_text, { params = params })
+  regist_node(self, root_text, self.root_node)
+  self.pending_request = self.pending_request + 1
+  genrate_call_graph_from_node(self, self.root_node, 1)
 end
 
-return M
+return InComingCall

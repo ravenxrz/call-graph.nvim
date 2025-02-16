@@ -1,14 +1,19 @@
 local M = {
-  bufs = {}
+  bufs = {
+
+  }
 }
 local log = require("call_graph.utils.log")
 
 --- 设置 buffer 的回调函数
 --- @param bufnr integer buffer number
 --- @param cb function 回调函数，接受 row 和 col 作为参数
-M.setup_buffer = function(bufnr, cb, keymap)
+M.setup_buffer = function(bufnr, cb, cb_ctx, keymap)
   local mapping = keymap or "gd"
-  M.bufs[bufnr] = cb
+  M.bufs[bufnr] = {
+    cb = cb,
+    cb_ctx = cb_ctx
+  }
   local cursor_cb = function()
     local bufid = vim.api.nvim_win_get_buf(0)
     log.debug("cursor cb is called, bufid", bufid)
@@ -25,7 +30,7 @@ M.setup_buffer = function(bufnr, cb, keymap)
     local current_col = pos[2]
     current_row = current_row - 1 -- 行是1-based
     current_col = current_col     -- 列是0-based
-    M.bufs[bufid](current_row, current_col)
+    M.bufs[bufid].cb(current_row, current_col, M.bufs[bufid].cb_ctx)
   end
   vim.keymap.set("n", mapping, cursor_cb, { buffer = bufnr, silent = true, noremap = true })
 end
