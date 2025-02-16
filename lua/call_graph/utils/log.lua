@@ -2,10 +2,12 @@ local log = {}
 
 -- 默认配置
 log.config = {
-  level = "info",                                     -- 日志级别：trace, debug, info, warn, error, fatal
-  filepath = vim.fn.stdpath('state') .. "/call_grap.log", -- 日志文件名
-  append = true,                                      -- 是否追加到文件
+  level = "info",                                                                       -- 日志级别：trace, debug, info, warn, error, fatal
+  filepath = vim.fn.stdpath('state') .. "/call_grap_" .. os.date("%Y-%m-%d") .. ".log", -- 日志文件名
+  append = true,                                                                        -- 是否追加到文件
+  caller = true,                                                                        -- 是否显示调用者信息
 }
+
 local config = log.config
 
 -- 日志级别映射
@@ -26,6 +28,17 @@ local function get_timestamp()
   return os.date("%Y-%m-%d %H:%M:%S")
 end
 
+-- 获取调用者信息
+local function get_caller_info()
+  local info = debug.getinfo(4, "Sl")                         -- 4 表示调用 log.trace/debug/info/warn/error/fatal 的函数
+  if info and info.short_src and info.currentline then
+    local filename = string.match(info.short_src, "([^/]+)$") -- 提取文件名
+    return string.format("%s:%d", filename, info.currentline)
+  else
+    return "unknown"
+  end
+end
+
 -- 写入日志到文件
 local function write_log(level, message)
   local log_level = levels[level] or 0
@@ -35,7 +48,11 @@ local function write_log(level, message)
     return -- 日志级别不够，不写入
   end
 
-  local log_message = string.format("%s [%s] %s\n", get_timestamp(), string.upper(level), message)
+  local caller_info = ""
+  if config.caller then
+    caller_info = string.format(" [%s]", get_caller_info())
+  end
+  local log_message = string.format("%s [%s]%s %s\n", get_timestamp(), string.upper(level), caller_info, message)
   log_file:write(log_message)
   log_file:flush()
 end
@@ -55,9 +72,11 @@ function log.setup(options)
     _setup()
     return
   end
+
   for k, v in pairs(options) do
     config[k] = v
   end
+
   _setup()
 end
 

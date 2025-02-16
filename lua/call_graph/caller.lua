@@ -1,7 +1,7 @@
 local M = {
-  --- @type Node
+  --- @type FuncNode
   root_node = nil,
-  nodes = {}, ---@type { [node_key: string] : Node }, record the generated node to dedup
+  nodes = {}, ---@type { [node_key: string] : GraphNode }, record the generated node to dedup
   parsed_nodes = {}, -- record which node has been called generate call graph
   buf = {
     bufid = -1,
@@ -11,6 +11,8 @@ local M = {
 }
 
 local log = require("call_graph.utils.log")
+local FuncNode = require("call_graph.class.func_node")
+local GraphNode = require("call_graph.class.graph_node")
 
 local genrate_call_graph_from_node
 
@@ -28,7 +30,7 @@ local function is_node_exist(node_key)
 end
 
 ---@param node_key string
----@param node Node
+---@param node GraphNode
 local function regist_node(node_key, node)
   assert(not is_node_exist(node_key), "node already exist")
   M.nodes[node_key] = node
@@ -40,10 +42,20 @@ local function is_parsed_node_exsit(node_key)
 end
 
 ---@param node_key string
----@param pasred_node Node
+---@param pasred_node GraphNode
 local function regist_parsed_node(node_key, pasred_node)
   assert(not is_parsed_node_exsit(node_key), "node already exist")
   M.parsed_nodes[node_key] = pasred_node
+end
+
+
+---@param node_text string
+---@param attr any
+---@return GraphNode
+local function make_graph_node(node_text, attr)
+  local func_node = FuncNode:new(node_text, attr)
+  local graph_node = GraphNode:new(node_text, func_node)
+  return graph_node
 end
 
 local function draw()
@@ -52,10 +64,13 @@ local function draw()
     M.buf.bufid = vim.api.nvim_create_buf(true, true)
     M.buf.graph = Drawer:new(M.buf.bufid)
   end
+  log.info("genrate graph of", M.root_node.text, "has child num", #M.root_node.children)
+  for i, node in ipairs(M.root_node.children) do
+    log.debug("child", i, node.text)
+  end
   M.buf.graph:draw(M.root_node)
   vim.api.nvim_set_current_buf(M.buf.bufid)
 end
-
 
 local function gen_call_graph_done()
   M.pending_request = M.pending_request - 1
@@ -69,6 +84,7 @@ end
 local function incoming_call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local depth = my_ctx.depth
+  log.debug("incoming from node", table2str(from_node))
   if err then
     vim.notify("Error getting incoming calls: " .. err.message, vim.log.levels.ERROR)
     gen_call_graph_done()
@@ -86,7 +102,6 @@ local function incoming_call_handler(err, result, _, my_ctx)
   end
 
   -- we have results, genrate node
-  local Node = require("call_graph.class.node")
   for _, call in ipairs(result) do
     local from_uri = call.from.uri
     local node_pos = call.from.range.start
@@ -95,7 +110,7 @@ local function incoming_call_handler(err, result, _, my_ctx)
     if is_node_exist(node_text) then
       node = M.nodes[node_text]
     else
-      node = Node:new(node_text, {
+      node = make_graph_node(node_text, {
         params = {
           textDocument = {
             uri = from_uri,
@@ -107,6 +122,7 @@ local function incoming_call_handler(err, result, _, my_ctx)
     end
     table.insert(from_node.children, node)
   end
+  log.debug("incoming call of", from_node.text, "has child", table2str(from_node.children))
   -- for caller, call generate agian until depth is deep enough
   -- if depth < 3 then
   for _, child in ipairs(from_node.children) do
@@ -136,11 +152,12 @@ local function find_buf_client()
   return client
 end
 
----@param node Node
+---@param node GraphNode
 ---@param depth integer
-genrate_call_graph_from_node = function(node, depth)
-  assert(not is_parsed_node_exsit(node.text), "node already parsed")
-  regist_parsed_node(node.text, node)
+genrate_call_graph_from_node = function(gnode, depth)
+  local fnode = gnode.usr_data
+  assert(not is_parsed_node_exsit(fnode.node_key), "node already parsed")
+  regist_parsed_node(fnode.node_key, gnode)
 
   -- find client
   local client = find_buf_client()
@@ -150,11 +167,13 @@ genrate_call_graph_from_node = function(node, depth)
     return
   end
 
+  log.debug("client request", table2str(gnode))
+
   -- convert posistion to callHierarchy item
-  client.request("textDocument/prepareCallHierarchy", node.attr.params, function(err, result, ctx)
+  client.request("textDocument/prepareCallHierarchy", fnode.attr.params, function(err, result, ctx)
     if err then
       gen_call_graph_done()
-      log.warn("Error preparing call hierarchy: " .. err.message, "call info", node.text)
+      log.warn("Error preparing call hierarchy: " .. err.message, "call info", fnode.node_key)
       return
     end
     if not result or #result == 0 then
@@ -167,7 +186,7 @@ genrate_call_graph_from_node = function(node, depth)
       function(err, result, ctx)
         incoming_call_handler(err, result, ctx, {
           depth = depth,
-          from_node = node
+          from_node = gnode
         })
       end
     )
@@ -194,10 +213,7 @@ function M.generate_call_graph()
   local params = vim.lsp.util.make_position_params()
   local func_name = vim.fn.expand("<cword>")
   local root_text = make_node_key(params.textDocument.uri, params.position.line, func_name)
-  local Node = require("call_graph.class.node")
-  M.root_node = Node:new(root_text, {
-    params = params
-  })
+  M.root_node = make_graph_node(root_text, { params = params })
   regist_node(root_text, M.root_node)
   M.pending_request = M.pending_request + 1
   genrate_call_graph_from_node(M.root_node, 1)

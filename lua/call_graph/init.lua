@@ -20,7 +20,7 @@ end
 
 function M.setup()
   -- setup logs
-  log.setup()
+  log.setup({ append = false, level = "info" })
   -- create the command
   create_user_cmd()
 end

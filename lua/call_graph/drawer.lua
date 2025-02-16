@@ -1,6 +1,7 @@
 local GraphDrawer = {}
 
 local log = require("call_graph.utils.log")
+local GraphNode = require("call_graph.class.graph_node")
 
 ---@class GraphDrawer
 -- Module for drawing graphs in Neovim buffers.
@@ -8,14 +9,13 @@ local log = require("call_graph.utils.log")
 ---@param bufnr integer The buffer number to draw the graph in.
 ---@return GraphDrawer
 function GraphDrawer:new(bufnr)
-  local self = {
+  local g = {
     bufnr = bufnr,
-    node_positions = {}, -- { [node_id: integer]: {row: integer, col: integer} }
     row_spacing = 3,
     col_spacing = 5,
   }
-  setmetatable(self, { __index = GraphDrawer })
-  return self
+  setmetatable(g, { __index = GraphDrawer })
+  return g
 end
 
 -- 确保缓冲区有足够的行
@@ -45,14 +45,14 @@ local function ensure_buffer_line_has_cols(self, line, required_col)
   end
 end
 
-local function draw_node(self, node, row, col, level)
-  if self.node_positions[node.nodeid] then -- drawed before
+local function draw_node(self, node)
+  if node.panted then
     return
   end
-  ensure_buffer_has_lines(self, row + 1)
-  ensure_buffer_line_has_cols(self, row, col + #node.text)
-  vim.api.nvim_buf_set_text(self.bufnr, row, col, row, col + #node.text, { node.text })
-  self.node_positions[node.nodeid] = { row = row, col = col, level = level }
+  node.panted = true
+  ensure_buffer_has_lines(self, node.row + 1)
+  ensure_buffer_line_has_cols(self, node.row, node.col + #node.text)
+  vim.api.nvim_buf_set_text(self.bufnr, node.row, node.col, node.row, node.col + #node.text, { node.text })
 end
 
 
@@ -109,64 +109,56 @@ local function draw_h_line(self, row, start_col, end_col, direction)
 end
 
 local function draw_edge(self, lhs, rhs, lhs_level_max_col)
-  local lhs_pos = self.node_positions[lhs.nodeid]
-  local rhs_pos = self.node_positions[rhs.nodeid]
-  assert(lhs_pos.col <= rhs_pos.col, string.format("lhs_col: %d, rhs_col: %d", lhs_pos.col, rhs_pos.col))
+  assert(lhs.col <= rhs.col, string.format("lhs.col: %d, rhs.col: %d", lhs.col, rhs.col))
   local fill_start_col = 0
   local fill_start_row = 0
   local fill_end_col = 0
   local fill_end_row = 0
 
-  if lhs_pos and rhs_pos then
-    -- 是否是同一行
-    if lhs_pos.row == rhs_pos.row then
-      fill_start_row = lhs_pos.row
-      fill_start_col = lhs_pos.col + #lhs.text
-      fill_end_row = rhs_pos.row
-      fill_end_col = rhs_pos.col
-      draw_h_line(self, fill_start_row, fill_start_col, fill_end_col, Direction.LEFT)
-      return
-    end
+  -- 是否是同一行
+  if lhs.row == rhs.row then
+    draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
+    return
+  end
 
-    --是否是同一列
-    if lhs_pos.col == rhs_pos.col then
-      fill_start_row = lhs_pos.row + 1
-      fill_start_col = lhs_pos.col
-      fill_end_row = rhs_pos.row
-      fill_end_col = rhs_pos.col
-      draw_v_line(self, fill_start_row, fill_end_row, fill_start_col, Direction.UP)
-      return
-    end
+  --是否是同一列
+  if lhs.col == rhs.col then
+    draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
+    return
+  end
 
-    -- 处理不同行不同列的情况：绘制L型连线
-    local lhs_end_col = lhs_pos.col + #lhs.text
-    local rhs_start_col = rhs_pos.col
-    local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1)
 
-    -- 绘制lhs到中间列的水平线
-    if mid_col > lhs_end_col then
-      draw_h_line(self, lhs_pos.row, lhs_end_col, mid_col, Direction.LEFT)
-    end
+  -- 处理不同行不同列的情况：绘制L型连线
+  local lhs_end_col = lhs.col + #lhs.text
+  local rhs_start_col = rhs.col
+  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1)
 
-    -- 绘制中间列的垂直线
-    local v_start = lhs_pos.row + 1
-    local v_end = rhs_pos.row
-    if v_end > v_start then
-      draw_v_line(self, v_start, v_end, mid_col)
-    elseif v_end < v_start then
-      -- 处理子节点在父节点上方的情况
-      draw_v_line(self, v_end, v_start, mid_col)
-    end
+  -- 绘制lhs到中间列的水平线
+  if mid_col > lhs_end_col then
+    draw_h_line(self, lhs.row, lhs_end_col, mid_col, Direction.LEFT)
+  end
 
-    -- 绘制中间列到rhs左侧的水平线
-    if rhs_start_col > mid_col then
-      draw_h_line(self, rhs_pos.row, mid_col, rhs_start_col)
-    end
+  -- 绘制中间列的垂直线
+  local v_start = lhs.row + 1
+  local v_end = rhs.row
+  if v_end > v_start then
+    draw_v_line(self, v_start, v_end, mid_col)
+  elseif v_end < v_start then
+    -- 处理子节点在父节点上方的情况
+    draw_v_line(self, v_end, v_start, mid_col)
+  end
+
+  -- 绘制中间列到rhs左侧的水平线
+  if rhs_start_col > mid_col then
+    draw_h_line(self, rhs.row, mid_col, rhs_start_col)
   end
 end
 
+---
+---@param root_node GraphNode
 function GraphDrawer:draw(root_node)
-  local queue = { { node = root_node, level = 1 } } -- for bfs
+  log.debug("graph info", table2str(root_node))
+  local queue = { root_node } -- for bfs
   local cur_level = 1
   local cur_level_nodes = {}
   local cur_level_max_col = {}
@@ -175,61 +167,62 @@ function GraphDrawer:draw(root_node)
   assert(self.col_spacing >= 5)
 
   -- 第一轮：绘制所有节点
-  drawed = {}
+  local added = {}
+  added[root_node.nodeid] = true
   ::continue::
   while #queue > 0 do
     local current = table.remove(queue, 1)
-    if drawed[current.node.node_id] then
-      goto continue
-    end
-    drawed[current.node.nodeid] = true
 
-    local node_level = current.level
-    local cur_node = current.node
-
-    if cur_level ~= node_level then
+    if cur_level ~= current.level then
       -- draw pre level nodes
       for _, n in ipairs(cur_level_nodes) do
-        draw_node(self, n.node, n.row, n.col, cur_level)
+        draw_node(self, n)
       end
-      -- update this level position
+      -- uadate this level position
       cur_row = 0
       cur_col = self.col_spacing + cur_level_max_col[cur_level]
-      cur_level = node_level
-      cur_level_max_col[cur_level] = cur_col + #cur_node.text
-      cur_level_nodes = { { node = cur_node, level = node_level, row = cur_row, col = cur_col } }
-    else
-      table.insert(cur_level_nodes, { node = cur_node, level = node_level, row = cur_row, col = cur_col })
-      cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + #cur_node.text)
+      cur_level = current.level
+      cur_level_nodes = {}
+      log.debug("level", cur_level, "start col", cur_col, "the first node", current.text)
     end
+    current.row = cur_row
+    current.col = cur_col
+    log.debug("set node pos", current.text, "level", current.level, "row", current.row, "col", current.col)
+    table.insert(cur_level_nodes, current)
+    cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + #current.text)
     cur_row = cur_row + self.row_spacing
 
     -- push bfs next level
-    for _, child in ipairs(cur_node.children) do
-      if not drawed[child.nodeid] then
-        table.insert(queue, { node = child, level = node_level + 1 })
+    for _, child in ipairs(current.children) do
+      if not added[child.nodeid] then
+        added[child.nodeid] = true
+        child.level = current.level + 1
+        table.insert(queue, child)
       end
     end
   end
   for _, n in ipairs(cur_level_nodes) do
-    draw_node(self, n.node, n.row, n.col)
+    draw_node(self, n)
   end
   cur_level_nodes = nil
 
   -- 第二轮：绘制所有边
-  drawed = {}
+  local visit = {}
   local function traverse(node)
+    log.debug("traverse of node", node.text, "node id", node.nodeid)
+    visit[node.nodeid] = true
     for _, child in ipairs(node.children) do
-      if not drawed[child.nodeid] then
-        drawed[node.nodeid] = true
-        local level = self.node_positions[node.nodeid].level
-        draw_edge(self, node, child, cur_level_max_col[level])
+      if not visit[child.nodeid] then
+        log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
+          "draw edge between", node.text, child.text,
+          string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
+        draw_edge(self, node, child, cur_level_max_col[node.level]) -- 环图只绘制一条边
         traverse(child)
       end
     end
+    visit[node.nodeid] = false
   end
   traverse(root_node)
 end
 
 return GraphDrawer
-
