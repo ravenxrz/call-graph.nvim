@@ -20,13 +20,16 @@ function InComingCall:new(hl_delay_ms, toogle_hl)
   o.pending_request = 0
 
   -- auto highlighting
-  o.namespace_id = vim.api.nvim_create_namespace('call_graph_hl') -- for highlight
+  o.namespace_id = vim.api.nvim_create_namespace('call_graph') -- for highlight
   o.last_cursor_hold = {
     node = nil,
   }
   o.hl_delay_ms = 200
   o.last_hl_time_ms = 0
   o.toggle_auto_hl = toogle_hl
+  o.ext_marks_id = {
+    edge = {}
+  }
 
   -- gen graph callback
   o.gen_graph_done = {
@@ -47,13 +50,23 @@ local function hl_edge(self, edge)
   for _, sub_edge in pairs(edge.sub_edges) do
     -- hl by line
     for i = sub_edge.start_row, sub_edge.end_row - 1 do
-      vim.api.nvim_buf_set_extmark(self.buf.bufid, self.namespace_id, i, sub_edge.start_col, {
+      local id = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.namespace_id, i, sub_edge.start_col, {
         end_row = i,
         end_col = sub_edge.end_col,
-        hl_group = "MyHighlight"
+        hl_group = "CallGraphLine"
       })
+      log.debug("sub edge", sub_edge:to_string(), "id", id)
+      table.insert(self.ext_marks_id.edge, id)
     end
   end
+end
+
+local function clear_all_hl_edge(self)
+  log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
+  for _, id in ipairs(self.ext_marks_id.edge) do
+    vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
+  end
+  self.ext_marks_id.edge = {}
 end
 
 local function make_node_key(uri, line, func_name)
@@ -214,7 +227,7 @@ local function cursor_hold_cb(row, col, ctx)
   self.last_cursor_hold.node = nil
   self.last_hl_time_ms = now
   -- clear hl, redraw hl
-  vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
+  clear_all_hl_edge(self)
   -- check node
   local overlaps_nodes = find_overlaps_nodes(self, row, col)
   if #overlaps_nodes ~= 0 then -- find node

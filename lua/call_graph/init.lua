@@ -6,7 +6,7 @@ local M = {
     hl_delay_ms = 200,
     auto_toggle_hl = true
   },
-  _auto_toggle_hl = true
+  _auto_toggle_hl = true,
 }
 local log = require("call_graph.utils.log")
 local incoming_callers = {}
@@ -75,7 +75,8 @@ end
 
 local function setup_hl()
   M._auto_toggle_hl = M.opts.auto_toggle_hl
-  vim.api.nvim_command('highlight MyHighlight guifg=#ff0000 guibg=#000000 gui=bold')
+  -- vim.api.nvim_set_hl(0, "CallGraphLine", { fg = "#d97ab4" })
+  vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
 end
 
 local function setup_autocmd()
@@ -95,9 +96,7 @@ function M.setup(opts)
   end
   -- setup logs
   log.setup({ append = false, level = M.opts.log_level })
-  -- create_hl_group
   setup_hl()
-  -- create the command
   create_user_cmd()
   setup_autocmd()
 end
