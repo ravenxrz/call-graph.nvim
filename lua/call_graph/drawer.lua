@@ -13,15 +13,28 @@ function GraphDrawer:new(bufnr)
     bufnr = bufnr,
     row_spacing = 3,
     col_spacing = 5,
-    draw_edge_cb = nil --- @type table {cb = func, cb_ctx: any}
+    draw_edge_cb = nil, --- @type table {cb = func, cb_ctx: any}
+    modifiable = true
   }
   setmetatable(g, { __index = GraphDrawer })
   return g
 end
 
+function GraphDrawer:set_modifiable(enable)
+  self.modifiable = enable
+  vim.api.nvim_set_option_value("modifiable", enable, { buf = self.bufnr })
+end
+
 function GraphDrawer:clear_buf()
+  local enable = self.modifiable
+  if not enable then
+    self:set_modifiable(true)
+  end
   local bufid = self.bufnr
   vim.api.nvim_buf_set_lines(bufid, 0, -1, false, {})
+  if not enable then
+    self:set_modifiable(false)
+  end
 end
 
 -- 确保缓冲区有足够的行

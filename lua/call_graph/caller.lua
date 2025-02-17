@@ -247,7 +247,7 @@ local function create_floating_window(cur_buf, text)
   }
 
   local winid = vim.api.nvim_open_win(buf, false, config)
-  vim.api.nvim_create_autocmd({ "CursorMoved" }, {
+  vim.api.nvim_create_autocmd({ "CursorMoved", "BufLeave", "BufWipeout" }, {
     buffer = cur_buf,
     callback = function(_)
       if vim.api.nvim_win_is_valid(winid) then
@@ -355,25 +355,31 @@ local function draw_edge_cb(edge, ctx)
   end
 end
 
+local function setup_buf(self)
+  Events.regist_press_cb(self.buf.bufid, goto_event_cb, self, "gd")
+  Events.regist_press_cb(self.buf.bufid, show_full_path, self, "K")
+  Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
+end
+
 local function draw(self)
   local Drawer = require("call_graph.drawer")
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
+    setup_buf(self)
   end
-  Events.regist_press_cb(self.buf.bufid, goto_event_cb, self, "gd")
-  Events.regist_press_cb(self.buf.bufid, show_full_path, self, "K")
-  Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
-  self.buf.graph = Drawer:new(self.buf.bufid)
   log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)
+  self.buf.graph = Drawer:new(self.buf.bufid)
   self.buf.graph.draw_edge_cb = {
     cb = draw_edge_cb,
     cb_ctx = self
   }
+  self.buf.graph:set_modifiable(true)
   self.buf.graph:draw(self.root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
   if self.gen_graph_done.cb ~= nil then
     self.gen_graph_done.cb(self.buf.bufid, self.gen_graph_done.cb_ctx)
   end
   vim.api.nvim_set_current_buf(self.buf.bufid)
+  self.buf.graph:set_modifiable(false)
 end
 
 local function gen_call_graph_done(self)
