@@ -211,6 +211,7 @@ local function cursor_hold_cb(row, col, ctx)
       self.last_cursor_hold.node.col + #self.last_cursor_hold.node.text))
     return
   end
+  self.last_cursor_hold.node = nil
   self.last_hl_time_ms = now
   -- clear hl, redraw hl
   vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)

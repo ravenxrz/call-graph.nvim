@@ -55,7 +55,7 @@ local function create_user_cmd()
     if not M._auto_toggle_hl then
       switch = "off"
     end
-    vim.notify(string.format("Call graph auto highlighting is:%s", switch), vim.log.levels.INFO)
+    vim.notify(string.format("Call graph auto highlighting is %s", switch), vim.log.levels.INFO)
     for _, caller in pairs(incoming_callers) do
       caller:set_auto_toggle_hl(M._auto_toggle_hl)
     end
