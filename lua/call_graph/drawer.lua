@@ -153,7 +153,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   local sub_edges = {}
   -- 是否是同一行
   if lhs.row == rhs.row then
-    table.insert(sub_edges, SubEdge:new(lhs.row, lhs.col + #lhs.text, lhs.row, rhs.col))
+    table.insert(sub_edges, SubEdge:new(lhs.row, lhs.col + #lhs.text, lhs.row + 1, rhs.col))
     if point_to_lhs then
       log.debug(string.format(
         "draw h line(point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
@@ -184,8 +184,8 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
       log.debug(string.format(
         "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, rhs.row - 1, lhs.row))
-      draw_v_line(self, rhs.row - 1, lhs.row + 1, lhs.col, Direction.DOWN)
-      table.insert(sub_edges, SubEdge:new(rhs.row - 1, lhs.col, lhs.row + 1, rhs.col))
+      draw_v_line(self, rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
+      table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col))
       call_draw_edge_cb(self, lhs, rhs, sub_edges)
     end
     return
@@ -198,7 +198,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
 
   -- 绘制lhs到中间列的水平线
   assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
-  table.insert(sub_edges, SubEdge:new(lhs.row, lhs_end_col, lhs.row, mid_col))
+  table.insert(sub_edges, SubEdge:new(lhs.row, lhs_end_col, lhs.row + 1, mid_col))
   if point_to_lhs then
     log.debug(string.format(
       "draw h line from lhs to mid col, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
@@ -223,7 +223,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
 
   -- 绘制中间列到rhs左侧的水平线
   assert(mid_col < rhs_start_col, string.format("mid_col: %d, rhs_start_col: %d", mid_col, rhs_start_col))
-  table.insert(sub_edges, SubEdge:new(rhs.row, mid_col - 1, rhs.row, rhs_start_col))
+  table.insert(sub_edges, SubEdge:new(rhs.row, mid_col - 1, rhs.row + 1, rhs_start_col))
   if point_to_lhs then
     log.debug(string.format(
       "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,

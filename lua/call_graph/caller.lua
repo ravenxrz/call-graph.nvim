@@ -30,8 +30,11 @@ local genrate_call_graph_from_node
 ---@param edge Edge
 local function hl_edge(self, edge)
   for _, sub_edge in pairs(edge.sub_edges) do
+    log.debug(string.format("hl sub edge: start_row:%d start_col:%d end_row:%d end_col:%d", sub_edge.start_row,
+      sub_edge.start_col, sub_edge.end_row, sub_edge.end_col))
     -- hl by line
-    for i = sub_edge.start_row, sub_edge.end_row do
+    for i = sub_edge.start_row, sub_edge.end_row - 1 do
+      local line_text = vim.api.nvim_buf_get_lines(0, i, i + 1, false)[1] or ""
       local r = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.namespace_id, i, sub_edge.start_col, {
         end_row = i,
         end_col = sub_edge.end_col,
