@@ -19,6 +19,11 @@ function GraphDrawer:new(bufnr)
   return g
 end
 
+function GraphDrawer:clear_buf()
+  local bufid = self.bufnr
+  vim.api.nvim_buf_set_lines(bufid, 0, -1, false, {})
+end
+
 -- 确保缓冲区有足够的行
 ---@param self
 ---@param target_line_cnt integer, row number, zero-based indexing, inclusive

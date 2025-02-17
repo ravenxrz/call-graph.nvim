@@ -43,8 +43,7 @@ M.regist_cursor_hold_cb = function(bufnr, cb, cb_ctx)
     M.bufs[bufnr] = {}
   end
   if M.bufs[bufnr] ~= nil and M.bufs[bufnr].cursor_hold ~= nil then
-    log.debug("cursor hold cb is already registed")
-    return
+    M.bufs[bufnr].cursor_hold = nil
   end
   M.bufs[bufnr].cursor_hold = {
     cb = cb,

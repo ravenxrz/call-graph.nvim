@@ -1,13 +1,26 @@
 -- plugin.lua
-local M = {}
+local M = {
+  opts = {
+    reuse_buf = false,
+    log_level = "info"
+  }
+}
 local log = require("call_graph.utils.log")
+local incoming_caller = nil
 
 local function create_user_cmd()
   vim.api.nvim_create_user_command(
     "CallGraph",
     function()
-      local incoming_caller = require("call_graph.caller"):new()
-      incoming_caller:generate_call_graph()
+      if not M.opts.reuse_buf then
+        require("call_graph.caller"):new():generate_call_graph()
+      else
+        if incoming_caller == nil then
+          incoming_caller = require("call_graph.caller"):new()
+        end
+        incoming_caller = incoming_caller:reset_graph()
+        incoming_caller:generate_call_graph()
+      end
     end,
     { desc = "Generate call graph for current buffer" }
   )
@@ -23,11 +36,20 @@ local function create_hl_group()
   vim.api.nvim_command('highlight MyHighlight guifg=#ff0000 guibg=#000000 gui=bold')
 end
 
-function M.setup()
+function M.setup(opts)
   -- setup logs
-  log.setup({ append = false, level = "info" })
+  if opts ~= nil and type(opts) == "table" then
+    for k, v in pairs(opts) do
+      M.opts[k] = v
+    end
+  end
+  -- setup logs
+  log.setup({ append = false, level = M.opts.log_level })
   -- create_hl_group
   create_hl_group()
+
+  M.incoming_caller = require("call_graph.caller"):new()
+
   -- create the command
   create_user_cmd()
 end

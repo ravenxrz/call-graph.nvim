@@ -82,7 +82,7 @@ local function make_graph_node(node_text, attr)
 end
 
 local function overlap_node(row, col, node)
-    return node.row == row and node.col <= col and col < node.col + #node.text
+  return node.row == row and node.col <= col and col < node.col + #node.text
 end
 
 local function find_overlaps_nodes(self, row, col)
@@ -222,10 +222,10 @@ local function draw(self)
   local Drawer = require("call_graph.drawer")
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
-    Events.setup_buffer_press_cursor_cb(self.buf.bufid, goto_event_cb, self, "gd")
-    Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
-    self.buf.graph = Drawer:new(self.buf.bufid)
   end
+  Events.setup_buffer_press_cursor_cb(self.buf.bufid, goto_event_cb, self, "gd")
+  Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
+  self.buf.graph = Drawer:new(self.buf.bufid)
   log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)
   self.buf.graph.draw_edge_cb = {
     cb = draw_edge_cb,
@@ -356,9 +356,9 @@ genrate_call_graph_from_node = function(self, gnode, depth)
     if err then
       gen_call_graph_done(self)
       log.warn("Error preparing call hierarchy: " .. err.message, "call info", fnode.node_key)
-      local uri = fnode.attr.params.textDocument.uri
-      local file_path = vim.uri_to_fname(uri)
-      vim.cmd("e " .. file_path)
+      -- local uri = fnode.attr.params.textDocument.uri
+      -- local file_path = vim.uri_to_fname(uri)
+      -- vim.cmd("e " .. file_path)
       return
     end
     if not result or #result == 0 then
@@ -377,6 +377,16 @@ genrate_call_graph_from_node = function(self, gnode, depth)
       end
     )
   end)
+end
+
+function InComingCall:reset_graph()
+  if self.buf.graph ~= nil then
+      self.buf.graph:clear_buf() 
+  end
+  local bufid = self.buf.bufid
+  self = InComingCall:new()
+  self.buf.bufid = bufid
+  return self
 end
 
 function InComingCall:generate_call_graph()
