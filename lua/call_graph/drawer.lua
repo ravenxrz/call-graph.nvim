@@ -178,14 +178,14 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
         "draw v line(point to lhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, lhs.row + 1, rhs.row))
       draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
-      table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col))
+      table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col + 1))
       call_draw_edge_cb(self, rhs, lhs, sub_edges)
     else
       log.debug(string.format(
         "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
-        lhs.col, rhs.row - 1, lhs.row))
+        lhs.col, rhs.row + 1, lhs.row))
       draw_v_line(self, rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
-      table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col))
+      table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col + 1))
       call_draw_edge_cb(self, lhs, rhs, sub_edges)
     end
     return
@@ -217,7 +217,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   local v_start = math.min(lhs.row, rhs.row)
   local v_end = math.max(lhs.row, rhs.row)
   assert(v_start ~= v_end, "v_start: %d, v_end: %d", v_start, v_end)
-  log.debug("draw v line, v_start: %d, v_end: %d, mid_col: %d", v_start, v_end, mid_col - 1)
+  log.debug(string.format("draw v line, v_start: %d, v_end: %d, mid_col: %d", v_start, v_end, mid_col - 1))
   draw_v_line(self, v_start + 1, v_end, mid_col - 1)
   table.insert(sub_edges, SubEdge:new(v_start + 1, mid_col - 1, v_end, mid_col))
 
