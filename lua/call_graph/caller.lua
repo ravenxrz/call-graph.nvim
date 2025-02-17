@@ -171,8 +171,8 @@ local function goto_event_cb(row, col, ctx)
   local overlaps_nodes = find_overlaps_nodes(self, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
-      -- todo(zhangxingrui): 超过1个node，由用户选择
-      log.warn("find overlaps nodes num is not 1, use the first node as default")
+      assert(false, string.format("find overlaps nodes num is larger than 1", #overlaps_nodes))
+      return
     end
     local target_node = overlaps_nodes[1]
     local fnode = target_node.usr_data
@@ -183,18 +183,10 @@ local function goto_event_cb(row, col, ctx)
   end
 
   -- overlap with edges?
-  log.debug("compare edge", vim.inspect(self.edges))
-  local overlaps_edges = find_overlaps_edges(self, row, col)
-  if #overlaps_edges ~= 0 then
-    if #overlaps_edges ~= 1 then
-      -- todo(zhangxingrui): 超过1个edge，由用户选择
-      log.warn("find overlaps edges num is", #overlaps_edges, ",use the first edge as default")
-      -- log.info("all overlaps edges", vim.inspect(overlaps_edges))
-    end
-    local target_edge = overlaps_edges[1]
-    log.debug(string.format("pos overlaps with edge [%s->%s]", target_edge.from_node.text, target_edge.to_node.text))
-    for _, p in ipairs(target_edge.from_node.parent) do
-      if p.node.nodeid == target_edge.to_node.nodeid then
+  local function jump_to_edge(edge)
+    log.debug(string.format("pos overlaps with edge [%s->%s]", edge.from_node.text, edge.to_node.text))
+    for _, p in ipairs(edge.from_node.parent) do
+      if p.node.nodeid == edge.to_node.nodeid then
         if p.call_pos_params.position == nil then
           vim.notify("find the overlaps edge, but no position info provided", vim.log.levels.WARN)
         else
@@ -203,6 +195,31 @@ local function goto_event_cb(row, col, ctx)
         break
       end
     end
+  end
+
+  local overlaps_edges = find_overlaps_edges(self, row, col)
+  local on_choice = function(_, idx)
+    if idx == nil then
+      return
+    end
+    local edge = overlaps_edges[idx]
+    jump_to_edge(edge)
+  end
+  local function get_edge_text(edge)
+    local text = edge.to_node.text .. "<-" .. edge.from_node.text
+    return text
+  end
+  if #overlaps_edges ~= 0 then
+    if #overlaps_edges ~= 1 then
+      -- build choice
+      local edge_items = {}
+      for _, edge in ipairs(overlaps_edges) do
+        table.insert(edge_items, get_edge_text(edge))
+      end
+      vim.ui.select(edge_items, {}, on_choice)
+      return
+    end
+    jump_to_edge(overlaps_edges[1])
   end
 end
 
@@ -251,7 +268,6 @@ local function show_full_path(row, col, ctx)
   local overlaps_nodes = find_overlaps_nodes(self, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
-      -- todo(zhangxingrui): 超过1个node，由用户选择
       vim.notify(string.format("find overlap nodes num is not 1, skip show full path, actual num", #overlaps_nodes),
         vim.log.levels.WARN)
       return
@@ -323,7 +339,7 @@ end
 
 ---@param edge Edge
 local function draw_edge_cb(edge, ctx)
-  local self = ctx -- TODO: fix this
+  local self = ctx
   assert(self ~= nil, "")
   log.debug("from node", edge.from_node.text, "to node", edge.to_node.text)
   for _, sub_edge in ipairs(edge.sub_edges) do
@@ -493,7 +509,7 @@ genrate_call_graph_from_node = function(self, gnode, depth)
     end
     local item = result[1]
     client.request("callHierarchy/incomingCalls", { item = item },
-      function(err, result, ctx)
+      function(err, result, _)
         incoming_call_handler(err, result, ctx, {
           depth = depth,
           from_node = gnode,
