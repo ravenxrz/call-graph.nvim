@@ -19,7 +19,9 @@ function InComingCall:new()
   }
   o.pending_request = 0
   o.namespace_id = vim.api.nvim_create_namespace('call_graph_hl') -- for highlight
-  o.last_cursor_hold_node = nil
+  o.last_cursor_hold = {
+    node = nil,
+  }
   return o
 end
 
@@ -85,6 +87,16 @@ local function overlap_node(row, col, node)
   return node.row == row and node.col <= col and col < node.col + #node.text
 end
 
+local function overlap_edge(row, col, edge)
+  for _, sub_edge in ipairs(edge.sub_edges) do
+    if (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col) or
+        (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row) then
+      return true
+    end
+  end
+  return false
+end
+
 local function find_overlaps_nodes(self, row, col)
   local overlaps_nodes = {}
   for _, node in pairs(self.nodes) do
@@ -98,16 +110,8 @@ end
 local function find_overlaps_edges(self, row, col)
   local overlaps_edges = {}
   for _, edge in pairs(self.edges) do
-    for _, sub_edge in ipairs(edge.sub_edges) do
-      if row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col then
-        table.insert(overlaps_edges, edge)
-        break
-      else
-        if col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row then
-          table.insert(overlaps_edges, edge)
-          break
-        end
-      end
+    if overlap_edge(row, col, edge) then
+      table.insert(overlaps_edges, edge)
     end
   end
   return overlaps_edges
@@ -177,11 +181,13 @@ end
 
 local function cursor_hold_cb(row, col, ctx)
   local self = ctx
-  if self.last_cursor_hold_node ~= nil and overlap_node(row, col, self.last_cursor_hold_node) then
+  -- check overlap with last node or not
+  if self.last_cursor_hold.node ~= nil and overlap_node(row, col, self.last_cursor_hold.node) then
     return
   end
+  -- clear hl, redraw hl
   vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
-  assert(self ~= nil, "")
+  -- check node
   local overlaps_nodes = find_overlaps_nodes(self, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
@@ -195,6 +201,14 @@ local function cursor_hold_cb(row, col, ctx)
     end
     -- hl outcoming
     for _, edge in pairs(target_node.outcoming_edges) do
+      hl_edge(self, edge)
+    end
+    return
+  end
+  -- check edge
+  local overlaps_edges = find_overlaps_edges(self, row, col)
+  if #overlaps_edges ~= 0 then
+    for _, edge in ipairs(overlaps_edges) do
       hl_edge(self, edge)
     end
   end
@@ -381,7 +395,7 @@ end
 
 function InComingCall:reset_graph()
   if self.buf.graph ~= nil then
-      self.buf.graph:clear_buf() 
+    self.buf.graph:clear_buf()
   end
   local bufid = self.buf.bufid
   self = InComingCall:new()
