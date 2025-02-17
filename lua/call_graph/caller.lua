@@ -7,7 +7,7 @@ local GraphNode = require("call_graph.class.graph_node")
 local Events = require("call_graph.utils.events")
 -- local Edge = require("call_graph.class.edge")
 
-function InComingCall:new(hl_delay_ms)
+function InComingCall:new(hl_delay_ms, toogle_hl)
   local o = setmetatable({}, InComingCall)
   o.root_node = nil   --- @type FuncNode
   o.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
@@ -18,16 +18,29 @@ function InComingCall:new(hl_delay_ms)
     graph = nil
   }
   o.pending_request = 0
+
+  -- auto highlighting
   o.namespace_id = vim.api.nvim_create_namespace('call_graph_hl') -- for highlight
   o.last_cursor_hold = {
     node = nil,
   }
   o.hl_delay_ms = 200
   o.last_hl_time_ms = 0
+  o.toggle_auto_hl = toogle_hl
+
+  -- gen graph callback
+  o.gen_graph_done = {
+    cb = nil,
+    cb_ctx = nil
+  }
   return o
 end
 
 local genrate_call_graph_from_node
+
+function InComingCall:set_auto_toggle_hl(toggle)
+  self.toggle_auto_hl = toggle
+end
 
 ---@param edge Edge
 local function hl_edge(self, edge)
@@ -186,6 +199,9 @@ end
 
 local function cursor_hold_cb(row, col, ctx)
   local self = ctx
+  if not self.toggle_auto_hl then
+    return
+  end
   local now = os.time() * 1000
   if now - self.last_hl_time_ms < self.hl_delay_ms then
     return
@@ -256,6 +272,9 @@ local function draw(self)
     cb_ctx = self
   }
   self.buf.graph:draw(self.root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
+  if self.gen_graph_done.cb ~= nil then
+    self.gen_graph_done.cb(self.buf.bufid, self.gen_graph_done.cb_ctx)
+  end
   vim.api.nvim_set_current_buf(self.buf.bufid)
 end
 
@@ -408,7 +427,9 @@ function InComingCall:reset_graph()
     self.buf.graph:clear_buf()
   end
   local bufid = self.buf.bufid
-  self = InComingCall:new()
+  local hl_delay_ms = self.hl_delay_ms
+  local toggle_auto_hl = self.toggle_auto_hl
+  self = InComingCall:new(hl_delay_ms, toggle_auto_hl)
   self.buf.bufid = bufid
   return self
 end
