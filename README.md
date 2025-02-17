@@ -8,6 +8,8 @@
 
 - pyright server 测试可用，但性能不佳，很不建议使用。 (TODO: 限制search层级)
 
+https://github.com/user-attachments/assets/e6a869d2-21bf-46eb-bf58-e8a81180f60f
+
 # 安装
 
 lazy.nvim

@@ -415,7 +415,6 @@ local function incoming_call_handler(err, result, _, my_ctx)
   end
 
   -- we have results, genrate node
-  local fnode = from_node.usr_data
   for _, call in ipairs(result) do
     local from_uri = call.from.uri
     local node_pos = call.from.range.start

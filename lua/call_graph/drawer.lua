@@ -310,15 +310,15 @@ function GraphDrawer:draw(root_node)
     log.debug("traverse of node", node.text, "node id", node.nodeid)
     visit[node.nodeid] = true
     for _, child in ipairs(node.children) do
+      log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
+        "draw edge between", node.text, child.text,
+        string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
+      if node.col <= child.col then
+        draw_edge(self, node, child, true, cur_level_max_col[node.level])   -- 环图只绘制一条边
+      else
+        draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
+      end
       if not visit[child.nodeid] then
-        log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
-          "draw edge between", node.text, child.text,
-          string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
-        if node.col <= child.col then
-          draw_edge(self, node, child, true, cur_level_max_col[node.level])   -- 环图只绘制一条边
-        else
-          draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
-        end
         traverse(child)
       end
     end
