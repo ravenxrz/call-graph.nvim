@@ -8,16 +8,26 @@ local log = require("call_graph.utils.log")
 --- 对指定bnfnr设定keymap，当用户按下指定快捷键时，调用指定的回调函数，回调函数包括当前光标位置和cb_ctx
 --- @param bufnr integer buffer number
 --- @param cb function 回调函数，接受 row 和 col 作为参数
-M.setup_buffer_press_cursor_cb = function(bufnr, cb, cb_ctx, keymap)
-  local mapping = keymap or "gd"
+M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
+  assert(keymap ~= nil, "keymap is nil")
   if M.bufs[bufnr] == nil then
     M.bufs[bufnr] = {}
   end
-  M.bufs[bufnr].press_cb = {
+  if M.bufs[bufnr].press_cb == nil then
+    M.bufs[bufnr].press_cb = {}
+  end
+  if M.bufs[bufnr].press_cb[keymap] ~= nil then
+    log.error("keymap already registed")
+    return
+  end
+
+  M.bufs[bufnr].press_cb[keymap] = {
     cb = cb,
     cb_ctx = cb_ctx
   }
+
   local cursor_cb = function()
+    local mapping = keymap
     local bufid = vim.api.nvim_win_get_buf(0)
     log.debug("cursor cb is called, bufid", bufid)
     if M.bufs[bufid] == nil then
@@ -33,9 +43,9 @@ M.setup_buffer_press_cursor_cb = function(bufnr, cb, cb_ctx, keymap)
     local current_col = pos[2]
     current_row = current_row - 1 -- 行是1-based
     current_col = current_col     -- 列是0-based
-    M.bufs[bufid].press_cb.cb(current_row, current_col, M.bufs[bufid].press_cb.cb_ctx)
+    M.bufs[bufid].press_cb[mapping].cb(current_row, current_col, M.bufs[bufid].press_cb[mapping].cb_ctx)
   end
-  vim.keymap.set("n", mapping, cursor_cb, { buffer = bufnr, silent = true, noremap = true })
+  vim.keymap.set("n", keymap, cursor_cb, { buffer = bufnr, silent = true, noremap = true })
 end
 
 M.regist_cursor_hold_cb = function(bufnr, cb, cb_ctx)

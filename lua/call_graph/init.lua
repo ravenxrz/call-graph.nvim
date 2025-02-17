@@ -75,7 +75,6 @@ end
 
 local function setup_hl()
   M._auto_toggle_hl = M.opts.auto_toggle_hl
-  -- vim.api.nvim_set_hl(0, "CallGraphLine", { fg = "#d97ab4" })
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
 end
 

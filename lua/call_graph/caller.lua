@@ -206,6 +206,68 @@ local function goto_event_cb(row, col, ctx)
   end
 end
 
+-- 创建悬浮窗口的函数
+local function create_floating_window(cur_buf, text)
+  -- 创建缓冲区
+  local buf = vim.api.nvim_create_buf(false, true)
+
+  -- 设置缓冲区内容
+  vim.api.nvim_buf_set_lines(buf, 0, 0, false, vim.split(text, "\n"))
+
+  -- 计算窗口位置和大小
+  local width = #text
+  local height = 1
+
+  -- 打开悬浮窗口
+  local config = {
+    relative = "cursor",
+    row = 1,
+    col = 1,
+    width = width,
+    height = height,
+    border = "rounded",
+    style = "minimal",
+  }
+
+  local winid = vim.api.nvim_open_win(buf, false, config)
+  vim.api.nvim_create_autocmd({ "CursorMoved" }, {
+    buffer = cur_buf,
+    callback = function(_)
+      if vim.api.nvim_win_is_valid(winid) then
+        vim.api.nvim_win_close(winid, true)
+      end
+    end,
+    desc = "Close floating window on cursor move",
+  })
+end
+
+local function show_full_path(row, col, ctx)
+  log.debug("user press", row, col)
+  local self = ctx
+  assert(self ~= nil, "")
+
+  -- overlap with nodes?
+  log.debug("compare node")
+  local overlaps_nodes = find_overlaps_nodes(self, row, col)
+  if #overlaps_nodes ~= 0 then -- find node
+    if #overlaps_nodes ~= 1 then
+      -- todo(zhangxingrui): 超过1个node，由用户选择
+      vim.notify(string.format("find overlap nodes num is not 1, skip show full path, actual num", #overlaps_nodes),
+        vim.log.levels.WARN)
+      return
+    end
+    local target_node = overlaps_nodes[1]
+    local fnode = target_node.usr_data
+    local params = fnode.attr.params
+    local uri = params.textDocument.uri
+    local line = params.position.line + 1       -- Neovim 的行号从 0 开始
+    local character = params.position.character -- Neovim 的列号从 1 开始
+    local file_path = vim.uri_to_fname(uri)
+    local full_path = string.format("%s:%d:%d", file_path, line, character)
+    create_floating_window(self.buf.bufid, full_path)
+    return
+  end
+end
 
 local function cursor_hold_cb(row, col, ctx)
   local self = ctx
@@ -282,7 +344,8 @@ local function draw(self)
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end
-  Events.setup_buffer_press_cursor_cb(self.buf.bufid, goto_event_cb, self, "gd")
+  Events.regist_press_cb(self.buf.bufid, goto_event_cb, self, "gd")
+  Events.regist_press_cb(self.buf.bufid, show_full_path, self, "K")
   Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
   self.buf.graph = Drawer:new(self.buf.bufid)
   log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)
