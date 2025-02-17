@@ -7,7 +7,7 @@ local GraphNode = require("call_graph.class.graph_node")
 local Events = require("call_graph.utils.events")
 -- local Edge = require("call_graph.class.edge")
 
-function InComingCall:new()
+function InComingCall:new(hl_delay_ms)
   local o = setmetatable({}, InComingCall)
   o.root_node = nil   --- @type FuncNode
   o.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
@@ -22,6 +22,8 @@ function InComingCall:new()
   o.last_cursor_hold = {
     node = nil,
   }
+  o.hl_delay_ms = 200
+  o.last_hl_time_ms = 0
   return o
 end
 
@@ -184,10 +186,15 @@ end
 
 local function cursor_hold_cb(row, col, ctx)
   local self = ctx
+  local now = os.time() * 1000
+  if now - self.last_hl_time_ms < self.hl_delay_ms then
+    return
+  end
   -- check overlap with last node or not
   if self.last_cursor_hold.node ~= nil and overlap_node(row, col, self.last_cursor_hold.node) then
     return
   end
+  self.last_hl_time_ms = now
   -- clear hl, redraw hl
   vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
   -- check node

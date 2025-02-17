@@ -2,7 +2,8 @@
 local M = {
   opts = {
     reuse_buf = false,
-    log_level = "info"
+    log_level = "info",
+    hl_delay_ms =  200
   }
 }
 local log = require("call_graph.utils.log")
@@ -13,10 +14,10 @@ local function create_user_cmd()
     "CallGraph",
     function()
       if not M.opts.reuse_buf then
-        require("call_graph.caller"):new():generate_call_graph()
+        require("call_graph.caller"):new(M.opts.hl_delay_ms):generate_call_graph()
       else
         if incoming_caller == nil then
-          incoming_caller = require("call_graph.caller"):new()
+          incoming_caller = require("call_graph.caller"):new(M.opts.hl_delay_ms)
         end
         incoming_caller = incoming_caller:reset_graph()
         incoming_caller:generate_call_graph()
