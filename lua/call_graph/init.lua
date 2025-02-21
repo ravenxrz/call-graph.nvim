@@ -5,8 +5,7 @@ local M = {
     log_level = "info",
     hl_delay_ms = 200,
     auto_toggle_hl = true
-  },
-  _auto_toggle_hl = true,
+  }
 }
 local log = require("call_graph.utils.log")
 local incoming_callers = {}
@@ -29,10 +28,10 @@ local function create_user_cmd()
       end
       local caller
       if not M.opts.reuse_buf then
-        caller = require("call_graph.caller"):new(M.opts.hl_delay_ms, M._auto_toggle_hl)
+        caller = require("call_graph.caller"):new(M.opts.hl_delay_ms, M.opts.auto_toggle_hl)
       else
         if get_len(incoming_callers) == 0 then
-          caller = require("call_graph.caller"):new(M.opts.hl_delay_ms, M._auto_toggle_hl)
+          caller = require("call_graph.caller"):new(M.opts.hl_delay_ms, M.opts.auto_toggle_hl)
         else
           for _, c in pairs(incoming_callers) do
             caller = c
@@ -49,15 +48,24 @@ local function create_user_cmd()
     { desc = "Generate call graph for current buffer" }
   )
 
-  vim.api.nvim_create_user_command("CallGraphToggleAutoHighlight", function()
-    M._auto_toggle_hl = not M._auto_toggle_hl
+  vim.api.nvim_create_user_command("CallGraphToggleReuseBuf", function()
+    M.opts.reuse_buf = not M.opts.reuse_buf
     local switch = "on"
-    if not M._auto_toggle_hl then
+    if not M.opts.reuse_buf then
+      switch = "off"
+    end
+    vim.notify(string.format("Call graph reuse buf is %s", switch), vim.log.levels.INFO)
+  end, {desc = "Toggle reuse buf of call graph"})
+
+  vim.api.nvim_create_user_command("CallGraphToggleAutoHighlight", function()
+    M.opts.auto_toggle_hl = not M.opts.auto_toggle_hl
+    local switch = "on"
+    if not M.opts.auto_toggle_hl then
       switch = "off"
     end
     vim.notify(string.format("Call graph auto highlighting is %s", switch), vim.log.levels.INFO)
     for _, caller in pairs(incoming_callers) do
-      caller:set_auto_toggle_hl(M._auto_toggle_hl)
+      caller:set_auto_toggle_hl(M.opts.auto_toggle_hl)
     end
   end, { desc = "Toggle highlighting of call graph" })
 
@@ -74,7 +82,6 @@ local function buf_del_cb(bufnr)
 end
 
 local function setup_hl()
-  M._auto_toggle_hl = M.opts.auto_toggle_hl
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
 end
 
