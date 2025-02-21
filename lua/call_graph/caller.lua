@@ -162,7 +162,7 @@ end
 ---@param row integer
 ---@param col integer
 local function goto_event_cb(row, col, ctx)
-  log.info(string.format("goto :%s",vim.inspect(ctx)))
+  log.info(string.format("goto :%s", vim.inspect(ctx)))
   log.debug("user press", row, col)
   local self = ctx
   assert(self ~= nil, "")
@@ -233,8 +233,18 @@ local function create_floating_window(cur_buf, text)
   vim.api.nvim_buf_set_lines(buf, 0, 0, false, vim.split(text, "\n"))
 
   -- 计算窗口位置和大小
-  local width = #text
-  local height = 1
+  local text_max_width = function()
+    local max_width = 0
+    for _, line in ipairs(vim.split(text, "\n")) do
+      max_width = math.max(max_width, #line)
+    end
+    return max_width
+  end
+  local text_max_height = function()
+    return #vim.split(text, "\n")
+  end
+  local width = text_max_width()
+  local height = text_max_height()
 
   -- 打开悬浮窗口
   local config = {
@@ -259,10 +269,28 @@ local function create_floating_window(cur_buf, text)
   })
 end
 
-local function show_full_path(row, col, ctx)
+local function show_node_info(row, col, ctx)
   log.debug("user press", row, col)
   local self = ctx
   assert(self ~= nil, "")
+
+  -- who calls this node
+  local get_callers = function(node)
+    P(node)
+    local callers = {}
+    for _, c in ipairs(node.children) do
+      table.insert(callers, "- " .. c.text)
+    end
+    return callers
+  end
+  -- node calls who?
+  local get_calls = function(node)
+    local calls = {}
+    for _, c in ipairs(node.parent) do
+      table.insert(calls, " - " .. c.node.text)
+    end
+    return calls
+  end
 
   -- overlap with nodes?
   log.debug("compare node")
@@ -280,8 +308,16 @@ local function show_full_path(row, col, ctx)
     local line = params.position.line + 1       -- Neovim 的行号从 0 开始
     local character = params.position.character -- Neovim 的列号从 1 开始
     local file_path = vim.uri_to_fname(uri)
-    local full_path = string.format("%s:%d:%d", file_path, line, character)
-    create_floating_window(self.buf.bufid, full_path)
+    local text = string.format("%s:%d:%d", file_path, line, character)
+    local callers = get_callers(target_node)
+    if #callers ~= 0 then
+      text = string.format("%s\ncallers(%d)\n%s", text, #callers, table.concat(callers, '\n'))
+    end
+    local callees = get_calls(target_node)
+    if #callees ~= 0 then
+      text = string.format("%s\ncalls(%s)\n%s", text, #callees, table.concat(callees, '\n'))
+    end
+    create_floating_window(self.buf.bufid, text)
     return
   end
 end
@@ -358,7 +394,7 @@ end
 
 local function setup_buf(self)
   Events.regist_press_cb(self.buf.bufid, goto_event_cb, self, "gd")
-  Events.regist_press_cb(self.buf.bufid, show_full_path, self, "K")
+  Events.regist_press_cb(self.buf.bufid, show_node_info, self, "K")
   Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, self)
 end
 
