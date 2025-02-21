@@ -276,7 +276,6 @@ local function show_node_info(row, col, ctx)
 
   -- who calls this node
   local get_callers = function(node)
-    P(node)
     local callers = {}
     for _, c in ipairs(node.children) do
       table.insert(callers, "- " .. c.text)
