@@ -8,6 +8,7 @@ local log = require("call_graph.utils.log")
 --- 对指定bnfnr设定keymap，当用户按下指定快捷键时，调用指定的回调函数，回调函数包括当前光标位置和cb_ctx
 --- @param bufnr integer buffer number
 --- @param cb function 回调函数，接受 row 和 col 作为参数
+--- NOTE: if keymap is already exists, this will overwriteit
 M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
   assert(keymap ~= nil, "keymap is nil")
   if M.bufs[bufnr] == nil then
@@ -15,10 +16,6 @@ M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
   end
   if M.bufs[bufnr].press_cb == nil then
     M.bufs[bufnr].press_cb = {}
-  end
-  if M.bufs[bufnr].press_cb[keymap] ~= nil then
-    log.error("keymap already registed")
-    return
   end
 
   M.bufs[bufnr].press_cb[keymap] = {
@@ -48,6 +45,7 @@ M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
   vim.keymap.set("n", keymap, cursor_cb, { buffer = bufnr, silent = true, noremap = true })
 end
 
+--- NOTE: if keymap is already exists, this will overwriteit
 M.regist_cursor_hold_cb = function(bufnr, cb, cb_ctx)
   if M.bufs[bufnr] == nil then
     M.bufs[bufnr] = {}

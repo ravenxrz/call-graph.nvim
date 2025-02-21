@@ -162,6 +162,7 @@ end
 ---@param row integer
 ---@param col integer
 local function goto_event_cb(row, col, ctx)
+  log.info(string.format("goto :%s",vim.inspect(ctx)))
   log.debug("user press", row, col)
   local self = ctx
   assert(self ~= nil, "")
@@ -365,8 +366,8 @@ local function draw(self)
   local Drawer = require("call_graph.drawer")
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
-    setup_buf(self)
   end
+  setup_buf(self)
   log.info("genrate graph of", self.root_node.text, "has child num", #self.root_node.children)
   self.buf.graph = Drawer:new(self.buf.bufid)
   self.buf.graph.draw_edge_cb = {
