@@ -41,7 +41,25 @@ function CallGraphView:set_toggle_auto_hl(toggle)
   self.toggle_auto_hl = toggle
 end
 
+function CallGraphView:set_bufid(bufid)
+  self.buf.bufid = bufid
+end
+
+-- local function print_caller_info()
+--   local info = debug.getinfo(3, "Sl") -- 2 表示上一层 caller，"Sl" 表示获取 source 和 line 信息
+--   if info then
+--     log.error("Caller file: " .. (info.source or "unknown"))
+--     log.error("Caller line: " .. (info.linedefined or "unknown"))
+--   else
+--     log.error("No caller information available.")
+--   end
+-- end
+
 local function hl_edge(self, edge)
+  if edge.sub_edges == nil then
+    log.error("hl: find nil sub edges", edge:to_string())
+    return false
+  end
   for _, sub_edge in pairs(edge.sub_edges) do
     -- hl by line
     for i = sub_edge.start_row, sub_edge.end_row - 1 do
@@ -54,6 +72,7 @@ local function hl_edge(self, edge)
       table.insert(self.ext_marks_id.edge, id)
     end
   end
+  return true
 end
 
 local function clear_all_hl_edge(self)
@@ -91,8 +110,12 @@ end
 local function find_overlaps_edges(edges, row, col)
   local overlaps_edges = {}
   for _, edge in pairs(edges) do
-    if overlap_edge(row, col, edge) then
-      table.insert(overlaps_edges, edge)
+    if edge.sub_edges ~= nil then
+      if overlap_edge(row, col, edge) then
+        table.insert(overlaps_edges, edge)
+      else
+        log.error("find a nil sub edges", edge:to_string())
+      end
     end
   end
   return overlaps_edges
@@ -113,53 +136,88 @@ end
 ---@param row integer
 ---@param col integer
 local function goto_event_cb(row, col, ctx)
-  log.debug(string.format("goto :%s", vim.inspect(ctx)))
+  -- 提取获取边文本的函数
+  local function get_edge_text(edge)
+    return edge.to_node.text .. "<-" .. edge.from_node.text
+  end
+
+  -- 构建选择项和跳转参数列表
+  local function build_jump_choices(target_node)
+    local jump_choice = {}
+    local jump_item = {}
+
+    -- 添加节点本身的跳转选项
+    table.insert(jump_item, target_node.text)
+    table.insert(jump_choice, target_node.usr_data.attr.pos_params)
+
+    -- 收集入边
+    for _, edge in ipairs(target_node.incoming_edges) do
+      table.insert(jump_item, get_edge_text(edge))
+      table.insert(jump_choice, edge.pos_params)
+    end
+
+    -- 收集出边
+    for _, edge in ipairs(target_node.outcoming_edges) do
+      table.insert(jump_item, get_edge_text(edge))
+      table.insert(jump_choice, edge.pos_params)
+    end
+
+    return jump_item, jump_choice
+  end
+
+  -- 创建选择回调函数
+  local function create_jump_callback(jump_choice)
+    return function(_, idx)
+      if idx == nil then
+        return
+      end
+      local pos_params = jump_choice[idx]
+      log.debug("Jumping to position based on selection")
+      jumpto(pos_params)
+    end
+  end
+
+  -- 处理重叠情况（节点或边）
+  local function handle_overlap(items, choices)
+    if #items == 1 then
+      jumpto(choices[1])
+    else
+      local callback = create_jump_callback(choices)
+      vim.ui.select(items, {}, callback)
+    end
+  end
+
   log.debug("user press", row, col)
   local nodes = ctx.nodes
   local edges = ctx.edges
-  -- overlap with nodes?
+
+  -- 检查是否与节点重叠
   log.debug("compare node")
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
-  if #overlaps_nodes ~= 0 then -- find node
+  if #overlaps_nodes ~= 0 then
     if #overlaps_nodes ~= 1 then
-      assert(false, string.format("find overlaps nodes num is larger than 1", #overlaps_nodes))
+      assert(false, string.format("find overlaps nodes num is larger than 1: %d", #overlaps_nodes))
       return
     end
     local target_node = overlaps_nodes[1]
-    local fnode = target_node.usr_data
-    local pos_params = fnode.attr.pos_params
     log.debug("pos overlaps with node", target_node.text)
-    jumpto(pos_params)
+
+    -- 构建选择项和跳转参数列表
+    local jump_item, jump_choice = build_jump_choices(target_node)
+    handle_overlap(jump_item, jump_choice)
     return
   end
-  -- overlap with edges?
-  local function jump_to_edge(edge)
-    log.debug(string.format("pos overlaps with edge [%s->%s]", edge.from_node.text, edge.to_node.text))
-    jumpto(edge.pos_params)
-  end
+
+  -- 检查是否与边重叠
   local overlaps_edges = find_overlaps_edges(edges, row, col)
-  local on_choice = function(_, idx)
-    if idx == nil then
-      return
-    end
-    local edge = overlaps_edges[idx]
-    jump_to_edge(edge)
-  end
-  local function get_edge_text(edge)
-    local text = edge.to_node.text .. "<-" .. edge.from_node.text
-    return text
-  end
   if #overlaps_edges ~= 0 then
-    if #overlaps_edges ~= 1 then
-      -- build choice
-      local edge_items = {}
-      for _, edge in ipairs(overlaps_edges) do
-        table.insert(edge_items, get_edge_text(edge))
-      end
-      vim.ui.select(edge_items, {}, on_choice)
-      return
+    local edge_items = {}
+    local edge_choices = {}
+    for _, edge in ipairs(overlaps_edges) do
+      table.insert(edge_items, get_edge_text(edge))
+      table.insert(edge_choices, edge.pos_params)
     end
-    jump_to_edge(overlaps_edges[1])
+    handle_overlap(edge_items, edge_choices)
   end
 end
 
@@ -246,7 +304,6 @@ local function show_node_info(row, col, ctx)
     if #callers ~= 0 then
       text = string.format("%s\ncallers(%d)\n%s", text, #callers, table.concat(callers, '\n'))
     end
-    log.info("target node show", vim.inspect(target_node))
     local callees = get_calls(target_node)
     if #callees ~= 0 then
       text = string.format("%s\ncalls(%d)\n%s", text, #callees, table.concat(callees, '\n'))
@@ -280,31 +337,37 @@ local function cursor_hold_cb(row, col, ctx)
   -- check node
   local nodes = ctx.nodes
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
+  log.info("find overlap node num", #overlaps_nodes)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
       log.warn("find overlaps nodes num is not 1, use the first node as default")
     end
     local target_node = overlaps_nodes[1]
-    log.debug(string.format("row:%d col:%d overlap with node:%s node position:%d,%d,%d,%d", row, col, target_node.text,
+    log.info(string.format("row:%d col:%d overlap with node:%s node position:%d,%d,%d,%d", row, col, target_node.text,
       target_node
       .row, target_node.col, target_node.row + 1, target_node.col + #target_node.text))
     self.last_cursor_hold.node = target_node
     -- hl incoming
     for _, edge in pairs(target_node.incoming_edges) do
-      hl_edge(self, edge)
+      if not hl_edge(self, edge) then
+        log.error("highlight edge of node", target_node.text, "incoming edges", vim.inspect(edge))
+      end
     end
     -- hl outcoming
     for _, edge in pairs(target_node.outcoming_edges) do
-      hl_edge(self, edge)
+      if not hl_edge(self, edge) then
+        log.error("highlight edge of node", target_node.text, "outcoming edges", vim.inspect(edge))
+      end
     end
     return
   end
   -- check edge
   local edges = ctx.edges
+  log.info("find overlap edge num", #edges)
   local overlaps_edges = find_overlaps_edges(edges, row, col)
   if #overlaps_edges ~= 0 then
     for _, edge in ipairs(overlaps_edges) do
-      log.debug(string.format("row:%d col:%d overlap with edge:%s", row, col, edge:to_string()))
+      log.info(string.format("row:%d col:%d overlap with edge:%s", row, col, edge:to_string()))
       hl_edge(self, edge)
     end
   end
@@ -324,23 +387,35 @@ local function draw_edge_cb(edge, ctx)
     return nil
   end
   local target_e = find_edge(edge)
-  assert(target_e ~= nil, "not found edge from drawer in view")
+  if target_e == nil then
+    log.error("not find edge", edge:to_string(), "in global edges")
+    assert(target_e ~= nil, "not found edge from drawer in view")
+  end
   target_e.sub_edges = edge.sub_edges
+  log.debug("set edge", target_e:to_string(), "sub edges")
 end
 
 local function setup_buf(self, nodes, edges)
   Events.regist_press_cb(self.buf.bufid, goto_event_cb, { nodes = nodes, edges = edges }, "gd")
-  Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, { self = self,  nodes = nodes, edges = edges })
+  Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, { self = self, nodes = nodes, edges = edges })
   Events.regist_press_cb(self.buf.bufid, show_node_info, { self = self, nodes = nodes }, "K")
 end
 
+
 function CallGraphView:draw(root_node, nodes, edges)
-  local Drawer = require("call_graph.graph_drawer")
+  local Drawer = require("call_graph.view.graph_drawer")
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end
   setup_buf(self, nodes, edges)
-  log.info("genrate graph of", root_node.text, "has child num", #root_node.children)
+  log.info("generate graph of", root_node.text, "has child num", #root_node.children)
+  for i, child in ipairs(root_node.children) do
+    log.debug("child", i, child.text)
+  end
+  log.debug("all edge info")
+  for _, edge in ipairs(edges) do
+    log.debug("edge", edge:to_string())
+  end
   local graph = Drawer:new(self.buf.bufid,
     {
       cb = draw_edge_cb,

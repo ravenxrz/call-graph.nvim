@@ -1,16 +1,34 @@
 -- caller.lua
-local CallGraphData = require("call_graph.graph_data")
-local CallGraphView = require("call_graph.graph_view")
+local ICallGraphData = require("call_graph.data.incoming_call_graph_data")
+local RCallGraphData = require("call_graph.data.ref_call_graph_data")
+local CallGraphView = require("call_graph.view.graph_view")
+local log = require("call_graph.utils.log")
 
-local Caller = {}
+local Caller = {
+  ---@enum CallType
+  CallType = {
+    _NO_CALl = 0,
+    INCOMING_CALL = 1,
+    REFERENCE_CALL = 2
+  }
+}
 Caller.__index = Caller
 
 -- 用于存储之前生成的 caller 实例
-local incoming_callers = {}
+local g_callers = {}
+local last_call_type = Caller.CallType._NO_CALl
+local g_resue_buf_id = -1
 
-function Caller:new(hl_delay_ms, toogle_hl)
+function Caller.new_incoming_call(hl_delay_ms, toogle_hl)
   local o = setmetatable({}, Caller)
-  o.data = CallGraphData:new()
+  o.data = ICallGraphData:new()
+  o.view = CallGraphView:new(hl_delay_ms, toogle_hl)
+  return o
+end
+
+function Caller.new_ref_call(hl_delay_ms, toogle_hl, max_depth)
+  local o = setmetatable({}, Caller)
+  o.data = RCallGraphData:new(max_depth)
   o.view = CallGraphView:new(hl_delay_ms, toogle_hl)
   return o
 end
@@ -19,26 +37,54 @@ end
 ---             - hl_delay_ms number
 ---             - auto_toggle_hl boolean
 ---             - reuse_buf boolean
-function Caller.generate_call_graph(opts)
-  local caller
-  if not opts.reuse then
-    caller = Caller:new(opts.hl_delay_ms, opts.auto_toggle_hl)
-  else
-    if #incoming_callers == 0 then
-      caller = Caller:new(opts.hl_delay_ms, opts.auto_toggle_hl)
+---@param call_type CallType, default is INCOMING_CALL
+function Caller.generate_call_graph(opts, call_type)
+  local function get_or_create_caller(new_func)
+    local caller
+    if not opts.reuse_buf or #g_callers == 0 or last_call_type ~= call_type then
+      last_call_type = call_type
+      g_callers = {}
+      if call_type == Caller.CallType.REFERENCE_CALL then
+        caller = new_func(opts.hl_delay_ms, opts.auto_toggle_hl, opts.ref_call_max_depth)
+      else
+        caller = new_func(opts.hl_delay_ms, opts.auto_toggle_hl)
+      end
+      if opts.reuse_buf then
+        table.insert(g_callers, caller)
+      end
     else
-      caller = incoming_callers[#incoming_callers]
+      caller = g_callers[#g_callers]
       caller.view:clear_view()
-      caller.view.set_hl_delay_ms(opts.hl_delay_ms)
-      caller.view.set_auto_toggle_hl(opts.auto_toggle_hl)
+      caller.view:set_hl_delay_ms(opts.hl_delay_ms)
+      caller.view:set_toggle_auto_hl(opts.auto_toggle_hl)
     end
+      caller.data:clear_data()
+    if opts.reuse_buf then
+      if vim.api.nvim_buf_is_valid(g_resue_buf_id) then
+        caller.view:set_bufid(g_resue_buf_id)
+      end
+    end
+    return caller
   end
 
-  local function on_graph_generated(root_node, nodes, edges)
-    print("[CallGraph] graph data generated")
-    caller.view:draw(root_node, nodes, edges)
+  local caller
+  if call_type == Caller.CallType.INCOMING_CALL then
+    caller = get_or_create_caller(Caller.new_incoming_call)
+  else
+    if call_type == Caller.CallType.REFERENCE_CALL then
+      caller = get_or_create_caller(Caller.new_ref_call)
+    else
+      vim.notify(string.format("unsupported call type", call_type), vim.log.levels.ERROR)
+      return
+    end
   end
-  table.insert(incoming_callers, caller)
+  log.debug("caller info:", vim.inspect(caller))
+
+  local function on_graph_generated(root_node, nodes, edges)
+    caller.view:draw(root_node, nodes, edges)
+    g_resue_buf_id = caller.view.buf.bufid
+    vim.notify("[CallGraph] graph generated", vim.log.levels.INFO)
+  end
   caller.data:generate_call_graph(on_graph_generated)
 end
 

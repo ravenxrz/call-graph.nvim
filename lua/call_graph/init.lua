@@ -4,7 +4,8 @@ local M = {
     reuse_buf = false,
     log_level = "info",
     hl_delay_ms = 200,
-    auto_toggle_hl = true
+    auto_toggle_hl = true,
+    ref_call_max_depth = 4
   }
 }
 local Caller = require("call_graph.caller")
@@ -13,11 +14,18 @@ local log = require("call_graph.utils.log")
 
 local function create_user_cmd()
   vim.api.nvim_create_user_command(
-    "CallGraph",
+    "CallGraphI",
     function()
-      Caller.generate_call_graph(M.opts)
+      Caller.generate_call_graph(M.opts, Caller.CallType.INCOMING_CALL)
     end,
-    { desc = "Generate call graph for current buffer" }
+    { desc = "Generate call graph using incoming call" }
+  )
+  vim.api.nvim_create_user_command(
+    "CallGraphR",
+    function()
+      Caller.generate_call_graph(M.opts, Caller.CallType.REFERENCE_CALL)
+    end,
+    { desc = "Generate call graph using reference call" }
   )
 
   vim.api.nvim_create_user_command("CallGraphToggleReuseBuf", function()
@@ -35,6 +43,7 @@ local function create_user_cmd()
     if not M.opts.auto_toggle_hl then
       switch = "off"
     end
+    vim.notify(string.format("Call graph auto hl is %s", switch), vim.log.levels.INFO)
   end, { desc = "Toggle highlighting of call graph" })
 
   vim.api.nvim_create_user_command("CallGraphLog",

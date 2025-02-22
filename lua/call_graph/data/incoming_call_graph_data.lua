@@ -1,8 +1,7 @@
--- 发起lsp请求，构建绘图数据结构
+-- 发起lsp incoming call请求，构建绘图数据结构
 local log = require("call_graph.utils.log")
 local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
-local Events = require("call_graph.utils.events")
 local Edge = require("call_graph.class.edge")
 
 local CallGraphData = {}
@@ -10,7 +9,7 @@ CallGraphData.__index = CallGraphData
 
 
 -- forward declare
-local genrate_call_graph_from_node
+local generate_call_graph_from_node
 
 function CallGraphData:new()
   local o = setmetatable({}, CallGraphData)
@@ -21,6 +20,15 @@ function CallGraphData:new()
   o._pending_request = 0
   o._parsednodes = {} -- record the node has been called generate call graph
   return o
+end
+
+-- TODO(zhangxingrui): any way not to rewrite this again?
+function CallGraphData:clear_data()
+  self.root_node = nil   --- @type FuncNode
+  self.edges = {}        --@type { [edge_id: string] :  Edge }
+  self.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
+  self._pending_request = 0
+  self._parsednodes = {} -- record the node has been called generate call graph
 end
 
 local function make_node_key(uri, line, func_name)
@@ -147,7 +155,7 @@ local function incoming_call_handler(err, result, _, my_ctx)
     local child_node_key = child.usr_data.node_key
     if not is_parsed_node_exsit(self, child_node_key) then
       self._pending_request = self._pending_request + 1
-      genrate_call_graph_from_node(self, child, depth + 1)
+      generate_call_graph_from_node(self, child, depth + 1)
     end
   end
   -- end
@@ -173,7 +181,7 @@ end
 
 ---@param node GraphNode
 ---@param depth integer
-genrate_call_graph_from_node = function(self, gnode, depth)
+generate_call_graph_from_node = function(self, gnode, depth)
   local fnode = gnode.usr_data
   regist_parsed_node(self, fnode.node_key, gnode)
   log.info("generate call graph of node", gnode.text)
@@ -217,7 +225,7 @@ function CallGraphData:generate_call_graph(gen_graph_done_cb)
   self.root_node = make_graph_node(root_text, { pos_params = pos_params })
   regist_gnode(self, root_text, self.root_node)
   self._pending_request = self._pending_request + 1
-  genrate_call_graph_from_node(self, self.root_node, 1)
+  generate_call_graph_from_node(self, self.root_node, 1)
 end
 
 return CallGraphData

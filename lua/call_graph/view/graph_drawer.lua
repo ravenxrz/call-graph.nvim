@@ -192,13 +192,16 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
         lhs.col, lhs.row + 1, rhs.row))
       draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
       table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col + 1))
-      call_draw_edge_cb(self, rhs, lhs, sub_edges)
     else
       log.debug(string.format(
         "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, rhs.row + 1, lhs.row))
       draw_v_line(self, rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
       table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col + 1))
+    end
+    if point_to_lhs then
+      call_draw_edge_cb(self, rhs, lhs, sub_edges)
+    else
       call_draw_edge_cb(self, lhs, rhs, sub_edges)
     end
     return
