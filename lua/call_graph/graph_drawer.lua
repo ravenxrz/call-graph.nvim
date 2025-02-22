@@ -8,12 +8,12 @@ local log = require("call_graph.utils.log")
 --- Creates a new GraphDrawer instance.
 ---@param bufnr integer The buffer number to draw the graph in.
 ---@return GraphDrawer
-function GraphDrawer:new(bufnr)
+function GraphDrawer:new(bufnr, draw_edge_cb)
   local g = {
     bufnr = bufnr,
     row_spacing = 3,
     col_spacing = 5,
-    draw_edge_cb = nil, --- @type table {cb = func, cb_ctx: any}
+    draw_edge_cb = draw_edge_cb, --- @type table {cb = func, cb_ctx: any}
     modifiable = true
   }
   setmetatable(g, { __index = GraphDrawer })
@@ -151,7 +151,7 @@ end
 ---@param sub_edges table<SubEdge>
 local function call_draw_edge_cb(self, from_node, to_node, sub_edges)
   if self.draw_edge_cb ~= nil then
-    local edge = Edge:new(from_node, to_node, sub_edges)
+    local edge = Edge:new(from_node, to_node, nil, sub_edges)
     self.draw_edge_cb.cb(edge, self.draw_edge_cb.cb_ctx)
   end
 end
@@ -314,9 +314,9 @@ function GraphDrawer:draw(root_node)
         "draw edge between", node.text, child.text,
         string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
       if node.col <= child.col then
-        draw_edge(self, node, child, true, cur_level_max_col[node.level])   -- 环图只绘制一条边
+        draw_edge(self, node, child, true, cur_level_max_col[node.level])
       else
-        draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
+        draw_edge(self, child, node, false, cur_level_max_col[child.level])
       end
       if not visit[child.nodeid] then
         traverse(child)
