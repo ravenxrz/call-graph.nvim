@@ -17,7 +17,6 @@ Caller.__index = Caller
 -- 用于存储之前生成的 caller 实例
 local g_callers = {}
 local last_call_type = Caller.CallType._NO_CALl
-local g_resue_buf_id = -1
 
 function Caller.new_incoming_call(hl_delay_ms, toogle_hl)
   local o = setmetatable({}, Caller)
@@ -54,15 +53,6 @@ function Caller.generate_call_graph(opts, call_type)
       end
     else
       caller = g_callers[#g_callers]
-      caller.view:clear_view()
-      caller.view:set_hl_delay_ms(opts.hl_delay_ms)
-      caller.view:set_toggle_auto_hl(opts.auto_toggle_hl)
-    end
-      caller.data:clear_data()
-    if opts.reuse_buf then
-      if vim.api.nvim_buf_is_valid(g_resue_buf_id) then
-        caller.view:set_bufid(g_resue_buf_id)
-      end
     end
     return caller
   end
@@ -82,7 +72,6 @@ function Caller.generate_call_graph(opts, call_type)
 
   local function on_graph_generated(root_node, nodes, edges)
     caller.view:draw(root_node, nodes, edges)
-    g_resue_buf_id = caller.view.buf.bufid
     print("[CallGraph] graph generated")
   end
   caller.data:generate_call_graph(on_graph_generated)

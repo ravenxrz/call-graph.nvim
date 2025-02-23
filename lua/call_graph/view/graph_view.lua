@@ -421,8 +421,13 @@ local function setup_buf(self, nodes, edges)
 end
 
 
-function CallGraphView:draw(root_node, nodes, edges)
+function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   local Drawer = require("call_graph.view.graph_drawer")
+  local bufid = self.buf.bufid
+  self:clear_view()
+  if reuse_buf then
+    self.buf.bufid = bufid
+  end
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end

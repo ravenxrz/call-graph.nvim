@@ -355,6 +355,7 @@ generate_call_graph_from_node = function(self, gnode, depth)
 end
 
 function CallGraphData:generate_call_graph(gen_graph_done_cb)
+  self:clear_data()
   self.gen_graph_done_cb = gen_graph_done_cb
   local pos_params = vim.lsp.util.make_position_params()
   local func_name = vim.fn.expand("<cword>")
