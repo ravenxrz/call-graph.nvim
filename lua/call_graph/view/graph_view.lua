@@ -28,10 +28,13 @@ end
 
 local function clear_all_hl_edge(self)
   log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
-  for _, id in ipairs(self.ext_marks_id.edge) do
-    vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
-  end
-  self.ext_marks_id.edge = {}
+  -- for _, id in ipairs(self.ext_marks_id.edge) do
+  --   vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
+  -- end
+  vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
+  self.ext_marks_id.edge = {
+    edge = {}
+  }
 end
 
 local function clear_all_lines(self)
