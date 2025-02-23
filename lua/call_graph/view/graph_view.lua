@@ -365,13 +365,13 @@ local function cursor_hold_cb(row, col, ctx)
     -- hl incoming
     for _, edge in pairs(target_node.incoming_edges) do
       if not hl_edge(self, edge) then
-        log.error("highlight edge of node", target_node.text, "incoming edges", vim.inspect(edge))
+        log.error("highlight edge of node", target_node.text, "incoming edges", edge:to_string())
       end
     end
     -- hl outcoming
     for _, edge in pairs(target_node.outcoming_edges) do
       if not hl_edge(self, edge) then
-        log.error("highlight edge of node", target_node.text, "outcoming edges", vim.inspect(edge))
+        log.error("highlight edge of node", target_node.text, "outcoming edges", edge:to_string())
       end
     end
     return
@@ -391,6 +391,7 @@ end
 --- update edge subedge info
 ---@param edge Edge
 local function draw_edge_cb(edge, ctx)
+  log.info("draw edge cb", edge:to_string())
   local dst_edges = ctx.edges
   -- TODO(zhangxingrui): this is really slow, O(n^2)
   local function find_edge(e)
@@ -407,7 +408,7 @@ local function draw_edge_cb(edge, ctx)
     assert(target_e ~= nil, "not found edge from drawer in view")
   end
   target_e.sub_edges = edge.sub_edges
-  log.debug("set edge", target_e:to_string(), "sub edges")
+  log.info("setup edge", target_e:to_string(), "sub edges")
 end
 
 local function setup_buf(self, nodes, edges)
@@ -425,11 +426,11 @@ function CallGraphView:draw(root_node, nodes, edges)
   setup_buf(self, nodes, edges)
   log.info("generate graph of", root_node.text, "has child num", #root_node.children)
   for i, child in ipairs(root_node.children) do
-    log.debug("child", i, child.text)
+    log.info("child", i, child.text)
   end
-  log.debug("all edge info")
+  log.info("all edge info")
   for _, edge in ipairs(edges) do
-    log.debug("edge", edge:to_string())
+    log.info("edge", edge:to_string())
   end
   self.buf.graph = Drawer:new(self.buf.bufid,
     {

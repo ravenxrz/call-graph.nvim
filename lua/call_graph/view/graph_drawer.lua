@@ -312,10 +312,16 @@ function GraphDrawer:draw(root_node)
   local function traverse(node)
     log.debug("traverse of node", node.text, "node id", node.nodeid)
     visit[node.nodeid] = true
+    log.debug("mark node", node.text, "node id", node.nodeid, "visited")
     for _, child in ipairs(node.children) do
       log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
         "draw edge between", node.text, child.text,
         string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
+      if node.text == child.text then
+        log.warn("node", node.text, "node id", node.nodeid, "has same text with child", child.text, "node id")
+        child.text = string.format("%s[%d]", child.text, child.nodeid) -- TODO: this will invalidate edge between `node` and `child`
+      end
+
       if node.col <= child.col then
         draw_edge(self, node, child, true, cur_level_max_col[node.level])
       else
@@ -326,6 +332,7 @@ function GraphDrawer:draw(root_node)
       end
     end
     visit[node.nodeid] = false
+    log.debug("unmark node", node.text, "node id", node.nodeid, "visited")
   end
   traverse(root_node)
   log.debug("draw graph done")

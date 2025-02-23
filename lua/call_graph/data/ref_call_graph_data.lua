@@ -226,7 +226,6 @@ local function ref_call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local fnode = from_node.usr_data
   local depth = my_ctx.depth
-  local client = my_ctx.client
 
   if err then
     gen_call_graph_done(self)
@@ -236,7 +235,7 @@ local function ref_call_handler(err, result, _, my_ctx)
 
   if not result or #result == 0 then
     gen_call_graph_done(self)
-    vim.notify(string.format("No references found of %s", fnode.node_key), vim.log.levels.WARN)
+    vim.notify(string.format("No references found of %s", fnode.node_key), vim.log.levels.DEBUG)
     return
   end
 
@@ -325,7 +324,7 @@ local function find_buf_client()
   return client
 end
 
----@param node GraphNode
+---@param gnode GraphNode
 ---@param depth integer
 generate_call_graph_from_node = function(self, gnode, depth)
   local fnode = gnode.usr_data
@@ -347,18 +346,11 @@ generate_call_graph_from_node = function(self, gnode, depth)
     }
   }
   client.request("textDocument/references", params, function(err, result, _)
-    local co = coroutine.create(function()
-      ref_call_handler(err, result, nil, {
-        self = self,
-        from_node = gnode,
-        depth = depth,
-        client = client
-      })
-    end)
-    local success, err_msg = coroutine.resume(co) -- 添加错误检查
-    if not success then
-      log.error("Coroutine error: " .. tostring(err_msg))
-    end
+    ref_call_handler(err, result, nil, {
+      self = self,
+      from_node = gnode,
+      depth = depth
+    })
   end)
 end
 
