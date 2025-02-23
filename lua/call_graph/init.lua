@@ -37,14 +37,15 @@ local function create_user_cmd()
     vim.notify(string.format("Call graph reuse buf is %s", switch), vim.log.levels.INFO)
   end, { desc = "Toggle reuse buf of call graph" })
 
-  vim.api.nvim_create_user_command("CallGraphToggleAutoHighlight", function()
-    M.opts.auto_toggle_hl = not M.opts.auto_toggle_hl
-    local switch = "on"
-    if not M.opts.auto_toggle_hl then
-      switch = "off"
-    end
-    vim.notify(string.format("Call graph auto hl is %s", switch), vim.log.levels.INFO)
-  end, { desc = "Toggle highlighting of call graph" })
+  -- TODO(zhangxingrui): support auto highlighting switch
+  -- vim.api.nvim_create_user_command("CallGraphToggleAutoHighlight", function()
+  --   M.opts.auto_toggle_hl = not M.opts.auto_toggle_hl
+  --   local switch = "on"
+  --   if not M.opts.auto_toggle_hl then
+  --     switch = "off"
+  --   end
+  --   vim.notify(string.format("Call graph auto hl is %s", switch), vim.log.levels.INFO)
+  -- end, { desc = "Toggle highlighting of call graph" })
 
   vim.api.nvim_create_user_command("CallGraphLog",
     function()

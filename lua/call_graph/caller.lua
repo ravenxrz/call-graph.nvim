@@ -83,7 +83,7 @@ function Caller.generate_call_graph(opts, call_type)
   local function on_graph_generated(root_node, nodes, edges)
     caller.view:draw(root_node, nodes, edges)
     g_resue_buf_id = caller.view.buf.bufid
-    vim.notify("[CallGraph] graph generated", vim.log.levels.INFO)
+    print("[CallGraph] graph generated")
   end
   caller.data:generate_call_graph(on_graph_generated)
 end
