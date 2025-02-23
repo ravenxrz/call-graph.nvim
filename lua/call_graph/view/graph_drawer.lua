@@ -65,10 +65,10 @@ local function ensure_buffer_line_has_cols(self, line, required_col)
 end
 
 local function draw_node(self, node)
-  if node.panted then
-    return
-  end
-  node.panted = true
+  -- if node.panted then
+  --   return
+  -- end
+  -- node.panted = true
   ensure_buffer_has_lines(self, node.row + 1)
   ensure_buffer_line_has_cols(self, node.row, node.col + #node.text)
   vim.api.nvim_buf_set_text(self.bufnr, node.row, node.col, node.row, node.col + #node.text, { node.text })
