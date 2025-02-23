@@ -8,12 +8,12 @@ local log = require("call_graph.utils.log")
 --- Creates a new GraphDrawer instance.
 ---@param bufnr integer The buffer number to draw the graph in.
 ---@return GraphDrawer
-function GraphDrawer:new(bufnr)
+function GraphDrawer:new(bufnr, draw_edge_cb)
   local g = {
     bufnr = bufnr,
     row_spacing = 3,
     col_spacing = 5,
-    draw_edge_cb = nil, --- @type table {cb = func, cb_ctx: any}
+    draw_edge_cb = draw_edge_cb, --- @type table {cb = func, cb_ctx: any}
     modifiable = true
   }
   setmetatable(g, { __index = GraphDrawer })
@@ -151,7 +151,7 @@ end
 ---@param sub_edges table<SubEdge>
 local function call_draw_edge_cb(self, from_node, to_node, sub_edges)
   if self.draw_edge_cb ~= nil then
-    local edge = Edge:new(from_node, to_node, sub_edges)
+    local edge = Edge:new(from_node, to_node, nil, sub_edges)
     self.draw_edge_cb.cb(edge, self.draw_edge_cb.cb_ctx)
   end
 end
@@ -192,13 +192,16 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
         lhs.col, lhs.row + 1, rhs.row))
       draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
       table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col + 1))
-      call_draw_edge_cb(self, rhs, lhs, sub_edges)
     else
       log.debug(string.format(
         "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, rhs.row + 1, lhs.row))
       draw_v_line(self, rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
       table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col + 1))
+    end
+    if point_to_lhs then
+      call_draw_edge_cb(self, rhs, lhs, sub_edges)
+    else
       call_draw_edge_cb(self, lhs, rhs, sub_edges)
     end
     return
@@ -314,9 +317,9 @@ function GraphDrawer:draw(root_node)
         "draw edge between", node.text, child.text,
         string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
       if node.col <= child.col then
-        draw_edge(self, node, child, true, cur_level_max_col[node.level])   -- 环图只绘制一条边
+        draw_edge(self, node, child, true, cur_level_max_col[node.level])
       else
-        draw_edge(self, child, node, false, cur_level_max_col[child.level]) -- 环图只绘制一条边
+        draw_edge(self, child, node, false, cur_level_max_col[child.level])
       end
       if not visit[child.nodeid] then
         traverse(child)
