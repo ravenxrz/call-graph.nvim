@@ -21,14 +21,16 @@ lazy.nvim
       log_level = "info",
       reuse_buf = true,  -- 多次生成的call graph是否复用同一个buf
       auto_toggle_hl = true, -- 是否自动高亮
-      hl_delay_ms = 200 -- 自动高亮间隔时间
+      hl_delay_ms = 200, -- 自动高亮间隔时间
+      ref_call_max_depth = 3 -- 使用reference call生成graph时，最多搜索的深度
     }
   }
 ```
 
 支持的cmd:
 
-- CallGraph: 生成call graph
+- CallGraphI: 使用incoming call生成call graph(快，但是不一定全)
+- CallGraphR: 使用references + treesitter生成call graph(慢，且会打开很多文件，但是call graph更全)
 - CallGraphToggleAutoHighlight: 开关自动高亮
 - CallGraphLog:  打开call graph的log
 
