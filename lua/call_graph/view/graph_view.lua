@@ -9,6 +9,7 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
   local defaultConfig = {
     buf = {
       bufid = -1,
+      graph = nil
     },
     namespace_id = vim.api.nvim_create_namespace('call_graph'), -- for highlight
     last_cursor_hold = {
@@ -25,7 +26,27 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
   return o
 end
 
+local function clear_all_hl_edge(self)
+  log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
+  for _, id in ipairs(self.ext_marks_id.edge) do
+    vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
+  end
+  self.ext_marks_id.edge = {}
+end
+
+local function clear_all_lines(self)
+  local line_count = vim.api.nvim_buf_line_count(self.buf.bufid)
+  vim.api.nvim_buf_set_lines(self.buf.bufid, 0, line_count, false, {})
+end
+
+
 function CallGraphView:clear_view()
+  if self.buf.graph then
+    self.buf.graph:set_modifiable(true)
+    clear_all_lines(self)
+    clear_all_hl_edge(self)
+    self.buf.graph:set_modifiable(false)
+  end
   self.last_cursor_hold = { node = nil }
   self.last_hl_time_ms = 0
   self.ext_marks_id = {
@@ -75,13 +96,7 @@ local function hl_edge(self, edge)
   return true
 end
 
-local function clear_all_hl_edge(self)
-  log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
-  for _, id in ipairs(self.ext_marks_id.edge) do
-    vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
-  end
-  self.ext_marks_id.edge = {}
-end
+
 
 local function overlap_node(row, col, node)
   return node.row == row and node.col <= col and col < node.col + #node.text
@@ -416,16 +431,16 @@ function CallGraphView:draw(root_node, nodes, edges)
   for _, edge in ipairs(edges) do
     log.debug("edge", edge:to_string())
   end
-  local graph = Drawer:new(self.buf.bufid,
+  self.buf.graph = Drawer:new(self.buf.bufid,
     {
       cb = draw_edge_cb,
       cb_ctx = { edges = edges }
     }
   )
-  graph:set_modifiable(true)
-  graph:draw(root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
+  self.buf.graph:set_modifiable(true)
+  self.buf.graph:draw(root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
   vim.api.nvim_set_current_buf(self.buf.bufid)
-  graph:set_modifiable(false)
+  self.buf.graph:set_modifiable(false)
 end
 
 return CallGraphView
