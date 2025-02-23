@@ -74,7 +74,7 @@ function Caller.generate_call_graph(opts, call_type)
     caller.view:draw(root_node, nodes, edges)
     print("[CallGraph] graph generated")
   end
-  caller.data:generate_call_graph(on_graph_generated)
+  caller.data:generate_call_graph(on_graph_generated, opts.reuse_buf)
 end
 
 return Caller

@@ -183,6 +183,10 @@ end
 ---@param depth integer
 generate_call_graph_from_node = function(self, gnode, depth)
   local fnode = gnode.usr_data
+  if is_parsed_node_exsit(self, fnode.node_key) then
+    gen_call_graph_done(self)
+    return
+  end
   regist_parsed_node(self, fnode.node_key, gnode)
   log.info("generate call graph of node", gnode.text)
   -- find client
@@ -217,16 +221,22 @@ generate_call_graph_from_node = function(self, gnode, depth)
   end)
 end
 
-function CallGraphData:generate_call_graph(gen_graph_done_cb)
-  self:clear_data()
+function CallGraphData:generate_call_graph(gen_graph_done_cb, reuse_data)
   self.gen_graph_done_cb = gen_graph_done_cb
   local pos_params = vim.lsp.util.make_position_params()
   local func_name = vim.fn.expand("<cword>")
   local root_text = make_node_key(pos_params.textDocument.uri, pos_params.position.line, func_name)
-  self.root_node = make_graph_node(root_text, { pos_params = pos_params })
-  regist_gnode(self, root_text, self.root_node)
+  local from_node
+  if reuse_data and is_gnode_exist(self, root_text) then
+    from_node = self.nodes[root_text]
+  else
+    self:clear_data()
+    self.root_node = make_graph_node(root_text, { pos_params = pos_params })
+    regist_gnode(self, root_text, self.root_node)
+    from_node = self.root_node
+  end
   self._pending_request = self._pending_request + 1
-  generate_call_graph_from_node(self, self.root_node, 1)
+  generate_call_graph_from_node(self, from_node, 1)
 end
 
 return CallGraphData
