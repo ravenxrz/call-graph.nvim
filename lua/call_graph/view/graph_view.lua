@@ -430,6 +430,7 @@ function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   end
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
+    vim.api.nvim_buf_set_name(self.buf.bufid, ".call_graph_" .. tostring(os.time()))
   end
   setup_buf(self, nodes, edges)
   log.info("generate graph of", root_node.text, "has child num", #root_node.children)

@@ -2,6 +2,7 @@
 local ICallGraphData = require("call_graph.data.incoming_call_graph_data")
 local RCallGraphData = require("call_graph.data.ref_call_graph_data")
 local CallGraphView = require("call_graph.view.graph_view")
+local MermaidGraph = require("call_graph.view.mermaid_graph")
 local log = require("call_graph.utils.log")
 
 local Caller = {
@@ -72,6 +73,9 @@ function Caller.generate_call_graph(opts, call_type)
 
   local function on_graph_generated(root_node, nodes, edges)
     caller.view:draw(root_node, nodes, edges)
+    if opts.export_mermaid_graph then
+      MermaidGraph.export(root_node, ".calL_grap.mermaid")
+    end
     print("[CallGraph] graph generated")
   end
   caller.data:generate_call_graph(on_graph_generated, opts.reuse_buf)

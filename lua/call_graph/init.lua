@@ -5,7 +5,8 @@ local M = {
     log_level = "info",
     hl_delay_ms = 200,
     auto_toggle_hl = true,
-    ref_call_max_depth = 4
+    ref_call_max_depth = 4,
+    export_mermaid_graph = false
   }
 }
 local Caller = require("call_graph.caller")
