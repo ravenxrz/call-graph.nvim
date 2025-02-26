@@ -4,7 +4,6 @@ local FuncNode = require("call_graph.class.func_node")
 local GraphNode = require("call_graph.class.graph_node")
 local Edge = require("call_graph.class.edge")
 
-
 local CallGraphData = {}
 CallGraphData.__index = CallGraphData
 
@@ -37,7 +36,7 @@ end
 local function make_node_key(uri, line, func_name)
   local file_path = vim.uri_to_fname(uri)
   local file_name = vim.fn.fnamemodify(file_path, ":t")
-  local node_text = string.format("%s@%s:%d", func_name, file_name, line + 1)
+  local node_text = string.format("%s/%s:%d", func_name, file_name, line + 1)
   return node_text
 end
 
