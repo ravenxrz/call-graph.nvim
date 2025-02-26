@@ -19,9 +19,9 @@ Caller.__index = Caller
 local g_callers = {}
 local last_call_type = Caller.CallType._NO_CALl
 
-function Caller.new_incoming_call(hl_delay_ms, toogle_hl)
+function Caller.new_incoming_call(hl_delay_ms, toogle_hl, max_depth)
   local o = setmetatable({}, Caller)
-  o.data = ICallGraphData:new()
+  o.data = ICallGraphData:new(max_depth)
   o.view = CallGraphView:new(hl_delay_ms, toogle_hl)
   return o
 end
@@ -47,7 +47,7 @@ function Caller.generate_call_graph(opts, call_type)
       if call_type == Caller.CallType.REFERENCE_CALL then
         caller = new_func(opts.hl_delay_ms, opts.auto_toggle_hl, opts.ref_call_max_depth)
       else
-        caller = new_func(opts.hl_delay_ms, opts.auto_toggle_hl)
+        caller = new_func(opts.hl_delay_ms, opts.auto_toggle_hl, opts.in_call_max_depth)
       end
       if opts.reuse_buf then
         table.insert(g_callers, caller)

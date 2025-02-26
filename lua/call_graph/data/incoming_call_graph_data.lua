@@ -11,11 +11,12 @@ CallGraphData.__index = CallGraphData
 -- forward declare
 local generate_call_graph_from_node
 
-function CallGraphData:new()
+function CallGraphData:new(max_depth)
   local o = setmetatable({}, CallGraphData)
   o.root_node = nil --- @type FuncNode
   o.edges = {}      --@type { [edge_id: string] :  Edge }
   o.nodes = {}      --@type { [node_key: string] : GraphNode }, record the generated node to dedup
+  o.max_depth = max_depth
 
   o._pending_request = 0
   o._parsednodes = {} -- record the node has been called generate call graph
@@ -150,15 +151,15 @@ local function incoming_call_handler(err, result, _, my_ctx)
     table.insert(self.edges, edge)
   end
   -- for caller, call generate agian until depth is deep enough
-  -- if depth < 3 then
-  for _, child in ipairs(from_node.children) do
-    local child_node_key = child.usr_data.node_key
-    if not is_parsed_node_exsit(self, child_node_key) then
-      self._pending_request = self._pending_request + 1
-      generate_call_graph_from_node(self, child, depth + 1)
+  if depth < self.max_depth then
+    for _, child in ipairs(from_node.children) do
+      local child_node_key = child.usr_data.node_key
+      if not is_parsed_node_exsit(self, child_node_key) then
+        self._pending_request = self._pending_request + 1
+        generate_call_graph_from_node(self, child, depth + 1)
+      end
     end
   end
-  -- end
   gen_call_graph_done(self)
 end
 

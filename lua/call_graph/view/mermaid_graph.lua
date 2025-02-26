@@ -10,7 +10,7 @@ end
 
 function MermaidGraph.export(root_node, output_path)
   local graph = {
-    "flowchart LR",
+    "flowchart RL",
     "classDef startNode fill:#D0F6D0,stroke:#333,stroke-width:2px",
     "classDef endNode fill:#fcc,stroke:#333,stroke-width:2px"
   }

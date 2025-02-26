@@ -5,6 +5,7 @@ local M = {
     log_level = "info",
     hl_delay_ms = 200,
     auto_toggle_hl = true,
+    in_call_max_depth = 4,
     ref_call_max_depth = 4,
     export_mermaid_graph = false
   }
@@ -17,9 +18,15 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command(
     "CallGraphI",
     function()
+      local opts = vim.deepcopy(M.opts)
+      if args ~= nil and args.args ~= '' then
+        local a = args.args
+        assert(tonumber(a), "arg must be a number")
+        opts.in_call_max_depth = tonumber(a)
+      end
       Caller.generate_call_graph(M.opts, Caller.CallType.INCOMING_CALL)
     end,
-    { desc = "Generate call graph using incoming call" }
+    { desc = "Generate call graph using incoming call", nargs = '?' }
   )
   vim.api.nvim_create_user_command(
     "CallGraphR",
