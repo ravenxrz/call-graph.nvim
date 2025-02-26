@@ -2,7 +2,9 @@
 local log = require("call_graph.utils.log")
 local Events = require("call_graph.utils.events")
 
-local CallGraphView = {}
+local CallGraphView = {
+  view_id = 1
+}
 CallGraphView.__index = CallGraphView
 
 function CallGraphView:new(hl_delay_ms, toogle_hl)
@@ -20,8 +22,10 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
     last_hl_time_ms = 0,
     ext_marks_id = {
       edge = {}
-    }
+    },
+    view_id = self.view_id
   }
+  self.view_id = self.view_id + 1
   local o = setmetatable(defaultConfig, CallGraphView)
   return o
 end
@@ -65,7 +69,7 @@ function CallGraphView:set_toggle_auto_hl(toggle)
   self.toggle_auto_hl = toggle
 end
 
-function CallGraphView:set_bufid(bufid)
+function CallGraphView:reuse_buf(bufid)
   self.buf.bufid = bufid
 end
 
@@ -420,18 +424,33 @@ local function setup_buf(self, nodes, edges)
   Events.regist_press_cb(self.buf.bufid, show_node_info, { self = self, nodes = nodes }, "K")
 end
 
+local function check_buf_exists(name)
+  local bufs = vim.api.nvim_list_bufs()
+  for _, buf in ipairs(bufs) do
+    local buf_name = vim.api.nvim_buf_get_name(buf)
+    if buf_name == name then
+      return true
+    end
+  end
+  return false
+end
 
 function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
+  if root_node == nil then
+    vim.notify("root node is empty", vim.log.levels.WARN)
+    return
+  end
   local Drawer = require("call_graph.view.graph_drawer")
   local bufid = self.buf.bufid
   self:clear_view()
   if reuse_buf then
     self.buf.bufid = bufid
   end
+
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
-    vim.api.nvim_buf_set_name(self.buf.bufid, ".call_graph_" .. tostring(os.time()))
   end
+  vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. '-' .. tonumber(self.view_id))
   setup_buf(self, nodes, edges)
   log.info("generate graph of", root_node.text, "has child num", #root_node.children)
   for i, child in ipairs(root_node.children) do
@@ -451,6 +470,7 @@ function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   self.buf.graph:draw(root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
   vim.api.nvim_set_current_buf(self.buf.bufid)
   self.buf.graph:set_modifiable(false)
+  return self.buf.bufid
 end
 
 return CallGraphView
