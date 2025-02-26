@@ -328,6 +328,10 @@ end
 ---@param depth integer
 generate_call_graph_from_node = function(self, gnode, depth)
   local fnode = gnode.usr_data
+  if is_parsed_node_exsit(self, fnode.node_key) then
+    gen_call_graph_done(self)
+    return
+  end
   regist_parsed_node(self, fnode.node_key, gnode)
   log.info("generate call graph of node", gnode.text)
   -- find client
@@ -369,7 +373,7 @@ function CallGraphData:generate_call_graph(gen_graph_done_cb, reuse_data)
     from_node = self.root_node
   end
   self._pending_request = self._pending_request + 1
-  generate_call_graph_from_node(self,from_node, 1)
+  generate_call_graph_from_node(self, from_node, 1)
 end
 
 return CallGraphData
