@@ -23,10 +23,16 @@ local function create_user_cmd()
   )
   vim.api.nvim_create_user_command(
     "CallGraphR",
-    function()
-      Caller.generate_call_graph(M.opts, Caller.CallType.REFERENCE_CALL)
+    function(args)
+      local opts = vim.deepcopy(M.opts)
+      if args ~= nil and args.args ~= '' then
+        local a = args.args
+        assert(tonumber(a), "arg must be a number")
+        opts.ref_call_max_depth = tonumber(a)
+      end
+      Caller.generate_call_graph(opts, Caller.CallType.REFERENCE_CALL)
     end,
-    { desc = "Generate call graph using reference call" }
+    { desc = "Generate call graph using reference call", nargs = '?' }
   )
 
   vim.api.nvim_create_user_command("CallGraphToggleReuseBuf", function()
