@@ -14,6 +14,7 @@ local Caller = require("call_graph.caller")
 local log = require("call_graph.utils.log")
 
 
+
 local function create_user_cmd()
   vim.api.nvim_create_user_command(
     "CallGraphI",
@@ -66,12 +67,22 @@ local function create_user_cmd()
       vim.cmd(":e " .. log.config.filepath)
     end
     , { desc = "Open call graph log file" })
+
+  vim.api.nvim_create_user_command("CallGraphOpenMermaidGraph",
+    function()
+      Caller.open_mermaid_file()
+    end
+    , { desc = "Open call graph mermaid file" })
 end
 
 local function setup_hl()
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
 end
 
+
+function M.is_reuse_buf()
+  return M.opts.reuse_buf
+end
 
 function M.setup(opts)
   -- setup opts
