@@ -61,6 +61,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
       return
     end
 
+    local children = {}
     -- we have results, generate node
     for _, call in ipairs(result) do
       local from_uri = call.from.uri
@@ -97,10 +98,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
         })
         self:regist_gnode(node_text, node)
       end
-
-      -- build node connections
-      table.insert(node.calls, from_node)
-      table.insert(from_node.children, node)
+      table.insert(children, node)
 
       -- generate edges
       -- In GraphData's view, from_node is the callee, node is the caller
@@ -113,7 +111,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
 
     -- for caller, call generate again until depth is deep enough
     if depth < self.max_depth then
-      for _, child in ipairs(from_node.children) do
+      for _, child in ipairs(children) do
         local child_node_key = child.usr_data.node_key
         if not self:is_parsed_node_exsit(child_node_key) then
           self._pending_request = self._pending_request + 1

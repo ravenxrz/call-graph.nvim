@@ -4,6 +4,7 @@ local GraphDrawer = {}
 local Edge = require("call_graph.class.edge")
 local SubEdge = require("call_graph.class.subedge")
 local log = require("call_graph.utils.log")
+
 ---@class GraphDrawer
 -- Module for drawing graphs in Neovim buffers.
 --- Creates a new GraphDrawer instance.
@@ -156,8 +157,18 @@ local function call_draw_edge_cb(self, from_node, to_node, sub_edges)
   end
 end
 
-local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
-  assert(lhs.col <= rhs.col, string.format("lhs.col: %d, rhs.col: %d", lhs.col, rhs.col))
+local function draw_edge(self, from_node, to_node, from_level_max_col)
+  local lhs, rhs
+  if from_node.col <= to_node.col then
+    lhs = from_node
+    rhs = to_node
+  else
+    lhs = to_node
+    rhs = from_node
+  end
+  -- 始终认为箭头从 from_node 指向 to_node
+  local point_to_rhs = from_node == lhs
+
   local fill_start_col = 0
   local fill_start_row = 0
   local fill_end_col = 0
@@ -167,72 +178,57 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   -- 是否是同一行
   if lhs.row == rhs.row then
     table.insert(sub_edges, SubEdge:new(lhs.row, lhs.col + #lhs.text, lhs.row + 1, rhs.col))
-    if point_to_lhs then
-      log.debug(string.format(
-        "draw h line(point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
-        lhs.row, lhs.col + #lhs.text, rhs.col))
-      self:draw_h_line(lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
-      call_draw_edge_cb(self, rhs, lhs, sub_edges)
-    else
-      log.debug(string.format(
-        "draw h line(point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
-        lhs.row, lhs.col + #lhs.text, rhs.col))
-      self:draw_h_line(lhs.row, lhs.col + #lhs.text, rhs.col, Direction.RIGHT)
-      call_draw_edge_cb(self, lhs, rhs, sub_edges)
-    end
+    local direction = point_to_rhs and Direction.RIGHT or Direction.LEFT
+    log.debug(string.format(
+      "draw h line(point to %s), lhs %s, rhs %s, row %d, from col %d to col %d", point_to_rhs and "rhs" or "lhs",
+      lhs.text, rhs.text,
+      lhs.row, lhs.col + #lhs.text, rhs.col))
+    self:draw_h_line(lhs.row, lhs.col + #lhs.text, rhs.col, direction)
+    call_draw_edge_cb(self, from_node, to_node, sub_edges)
     return
   end
 
   --是否是同一列
   if lhs.col == rhs.col then
-    assert(lhs.row ~= rhs.row, "lhs.row: %d, rhs.row: %d", lhs.row, rhs.row)
+    assert(lhs.row ~= rhs.row, string.format("lhs.row: %d, rhs.row: %d", lhs.row, rhs.row))
+    local v_start, v_end
     if lhs.row < rhs.row then
-      log.debug(string.format(
-        "draw v line(point to lhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
-        lhs.col, lhs.row + 1, rhs.row))
-      self:draw_v_line(lhs.row + 1, rhs.row, lhs.col, Direction.UP)
-      table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col + 1))
+      v_start = lhs.row + 1
+      v_end = rhs.row
     else
-      log.debug(string.format(
-        "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
-        lhs.col, rhs.row + 1, lhs.row))
-      self:draw_v_line(rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
-      table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col + 1))
+      v_start = rhs.row + 1
+      v_end = lhs.row
     end
-    if point_to_lhs then
-      call_draw_edge_cb(self, rhs, lhs, sub_edges)
-    else
-      call_draw_edge_cb(self, lhs, rhs, sub_edges)
-    end
+    local direction = (lhs.row < rhs.row) and Direction.DOWN or Direction.UP
+    log.debug(string.format(
+      "draw v line(point to %s), lhs %s, rhs %s, col %d, from row %d to row %d", point_to_rhs and "rhs" or "lhs",
+      lhs.text, rhs.text,
+      lhs.col, v_start, v_end))
+    self:draw_v_line(v_start, v_end, lhs.col, direction)
+    table.insert(sub_edges, SubEdge:new(v_start, lhs.col, v_end, lhs.col + 1))
+    call_draw_edge_cb(self, from_node, to_node, sub_edges)
     return
   end
 
   -- 处理不同行不同列的情况：绘制L型连线
   local lhs_end_col = lhs.col + #lhs.text
   local rhs_start_col = rhs.col
-  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1) + 1
+  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), from_level_max_col + 1) + 1
 
   -- 绘制lhs到中间列的水平线
   assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
   table.insert(sub_edges, SubEdge:new(lhs.row, lhs_end_col, lhs.row + 1, mid_col))
-  if point_to_lhs then
-    log.debug(string.format(
-      "draw h line from lhs to mid col, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
-      rhs.text,
-      lhs.row, lhs_end_col, mid_col))
-    self:draw_h_line(lhs.row, lhs_end_col, mid_col, Direction.LEFT)
-  else
-    log.debug(string.format(
-      "draw h line from lhs to mid col (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs
-      .text,
-      lhs.row, lhs_end_col, mid_col))
-    self:draw_h_line(lhs.row, lhs_end_col, mid_col)
-  end
+  log.debug(string.format(
+    "draw h line from lhs to mid col, (point to %s), lhs %s, rhs %s, row %d, from col %d to col %d",
+    point_to_rhs and "rhs" or "lhs", lhs.text,
+    rhs.text,
+    lhs.row, lhs_end_col, mid_col))
+  self:draw_h_line(lhs.row, lhs_end_col, mid_col)
 
   -- 绘制中间列的垂直线
   local v_start = math.min(lhs.row, rhs.row)
   local v_end = math.max(lhs.row, rhs.row)
-  assert(v_start ~= v_end, "v_start: %d, v_end: %d", v_start, v_end)
+  assert(v_start ~= v_end, string.format("v_start: %d, v_end: %d", v_start, v_end))
   log.debug(string.format("draw v line, v_start: %d, v_end: %d, mid_col: %d", v_start, v_end, mid_col - 1))
   self:draw_v_line(v_start + 1, v_end, mid_col - 1)
   table.insert(sub_edges, SubEdge:new(v_start + 1, mid_col - 1, v_end, mid_col))
@@ -240,26 +236,21 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   -- 绘制中间列到rhs左侧的水平线
   assert(mid_col < rhs_start_col, string.format("mid_col: %d, rhs_start_col: %d", mid_col, rhs_start_col))
   table.insert(sub_edges, SubEdge:new(rhs.row, mid_col - 1, rhs.row + 1, rhs_start_col))
-  if point_to_lhs then
-    log.debug(string.format(
-      "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
-      rhs.text,
-      rhs.row, mid_col - 1, rhs_start_col))
-    self:draw_h_line(rhs.row, mid_col - 1, rhs_start_col)
-    call_draw_edge_cb(self, rhs, lhs, sub_edges)
-  else
-    log.debug(string.format(
-      "draw h line from mid col to rhs, (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
-      rhs.text,
-      rhs.row, mid_col - 1, rhs_start_col))
+  log.debug(string.format(
+    "draw h line from mid col to rhs, (point to %s), lhs %s, rhs %s, row %d, from col %d to col %d",
+    point_to_rhs and "rhs" or "lhs", lhs.text,
+    rhs.text,
+    rhs.row, mid_col - 1, rhs_start_col))
+  if point_to_rhs then
     self:draw_h_line(rhs.row, mid_col - 1, rhs_start_col, Direction.RIGHT)
-    call_draw_edge_cb(self, lhs, rhs, sub_edges)
+  else
+    self:draw_h_line(rhs.row, mid_col - 1, rhs_start_col)
   end
+  call_draw_edge_cb(self, from_node, to_node, sub_edges)
 end
 
----
----@param root_node GraphNode
-function GraphDrawer:draw(root_node)
+
+function GraphDrawer:draw(root_node, traverse_by_incoming)
   local queue = { root_node } -- for bfs
   local cur_level = 1
   local cur_level_nodes = {}
@@ -281,7 +272,7 @@ function GraphDrawer:draw(root_node)
       end
       -- uadate this level position
       cur_row = 0
-      cur_col = self.col_spacing + cur_level_max_col[cur_level]
+      cur_col = self.col_spacing + (cur_level_max_col[cur_level] or 0)
       cur_level = current.level
       cur_level_nodes = {}
       log.debug("level", cur_level, "start col", cur_col, "the first node", current.text)
@@ -294,10 +285,13 @@ function GraphDrawer:draw(root_node)
     cur_row = cur_row + self.row_spacing
 
     -- push bfs next level
-    for _, child in ipairs(current.children) do
+    -- 根据 traverse_by_incoming 参数选择遍历的边
+    local edges = traverse_by_incoming and current.incoming_edges or current.outcoming_edges
+    for _, edge in ipairs(edges) do
+      local child = traverse_by_incoming and edge.from_node or edge.to_node
       if not added[child.nodeid] then
         added[child.nodeid] = true
-        child.level = current.level + 1
+        child.level = current.level + (traverse_by_incoming and -1 or 1)
         table.insert(queue, child)
       end
     end
@@ -313,7 +307,10 @@ function GraphDrawer:draw(root_node)
     log.debug("traverse of node", node.text, "node id", node.nodeid)
     visit[node.nodeid] = true
     log.debug("mark node", node.text, "node id", node.nodeid, "visited")
-    for _, child in ipairs(node.children) do
+    -- 根据 traverse_by_incoming 参数选择遍历的边
+    local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
+    for _, edge in ipairs(edges) do
+      local child = traverse_by_incoming and edge.from_node or edge.to_node
       log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
         "draw edge between", node.text, child.text,
         string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
@@ -321,12 +318,8 @@ function GraphDrawer:draw(root_node)
         log.warn("node", node.text, "node id", node.nodeid, "has same id with child", child.text, "node id")
         return
       end
-
-      if node.col <= child.col then
-        draw_edge(self, node, child, true, cur_level_max_col[node.level])
-      else
-        draw_edge(self, child, node, false, cur_level_max_col[child.level])
-      end
+      local from_node, to_node = edge.from_node, edge.to_node
+      draw_edge(self, from_node, to_node, cur_level_max_col[node.level])
       if not visit[child.nodeid] then
         traverse(child)
       end
@@ -339,3 +332,4 @@ function GraphDrawer:draw(root_node)
 end
 
 return GraphDrawer
+

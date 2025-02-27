@@ -177,6 +177,7 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
 
   -- 处理引用结果
   local caller = {}
+  local children = {}
   for i, ref in ipairs(result) do
     log.debug("references result", i, vim.inspect(ref))
     local uri = ref.uri
@@ -209,8 +210,7 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
       if caller[node_text] == nil then -- 避免重复分析同一个节点
         caller[node_text] = true
         -- 建立节点之间的连接关系
-        table.insert(node.calls, from_node)
-        table.insert(from_node.children, node)
+        table.insert(children, node)
         log.info(string.format("node:%s has child:%s", from_node.text, node.text))
         -- 生成边
         local call_pos_params = {
@@ -228,7 +228,7 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
 
   -- 递归生成调用图
   if depth < self.max_depth - 1 then
-    for _, child in pairs(from_node.children) do
+    for _, child in pairs(children) do
       local child_node_key = child.usr_data.node_key
       if not self:is_parsed_node_exsit(child_node_key) then
         log.info("try generate call graph of node", child_node_key)
