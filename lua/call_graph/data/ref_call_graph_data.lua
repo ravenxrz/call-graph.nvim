@@ -222,7 +222,6 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
         local edge = Edge:new(node, from_node, call_pos_params)
         table.insert(from_node.incoming_edges, edge)
         table.insert(node.outcoming_edges, edge)
-        table.insert(self.edges, edge)
       end
     end
   end

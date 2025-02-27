@@ -436,11 +436,46 @@ local function check_buf_exists(name)
   return false
 end
 
-function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
+local function collect_nodes_and_edges(root_node)
+  local nodes = {}
+  local edges = {}
+  local visited = {}
+
+  local function dfs(node)
+    if visited[node] then
+      return
+    end
+    visited[node] = true
+    table.insert(nodes, node)
+
+    -- 收集入边
+    for _, edge in ipairs(node.incoming_edges or {}) do
+      table.insert(edges, edge)
+    end
+    -- 收集出边
+    for _, edge in ipairs(node.outcoming_edges or {}) do
+      table.insert(edges, edge)
+    end
+
+    -- 递归遍历子节点
+    for _, child in ipairs(node.children or {}) do
+      dfs(child)
+    end
+  end
+
+  dfs(root_node)
+  return nodes, edges
+end
+
+function CallGraphView:draw(root_node, reuse_buf)
   if root_node == nil then
     vim.notify("root node is empty", vim.log.levels.WARN)
     return
   end
+
+  -- 从 root_node 中收集 nodes 和 edges
+  local nodes, edges = collect_nodes_and_edges(root_node)
+
   local Drawer = require("call_graph.view.graph_drawer")
   self:clear_view() -- always redraw everything
   if reuse_buf and self.buf.bufid ~= -1 and vim.api.nvim_buf_is_valid(self.buf.bufid) then
@@ -448,8 +483,10 @@ function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   else
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end
+
   vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. '-' .. tonumber(self.view_id))
   setup_buf(self, nodes, edges)
+
   log.info("generate graph of", root_node.text, "has child num", #root_node.children)
   for i, child in ipairs(root_node.children) do
     log.info("child", i, child.text)
@@ -458,6 +495,7 @@ function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   for _, edge in ipairs(edges) do
     log.info("edge", edge:to_string())
   end
+
   self.buf.graph = Drawer:new(self.buf.bufid,
     {
       cb = draw_edge_cb,
@@ -468,6 +506,7 @@ function CallGraphView:draw(root_node, nodes, edges, reuse_buf)
   self.buf.graph:draw(root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
   vim.api.nvim_set_current_buf(self.buf.bufid)
   self.buf.graph:set_modifiable(false)
+
   return self.buf.bufid
 end
 
