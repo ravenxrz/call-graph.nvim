@@ -109,7 +109,6 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
       -- from_node is the callee, node is the caller
       table.insert(from_node.incoming_edges, edge)
       table.insert(node.outcoming_edges, edge)
-      table.insert(self.edges, edge)
     end
 
     -- for caller, call generate again until depth is deep enough

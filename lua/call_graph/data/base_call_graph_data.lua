@@ -10,7 +10,6 @@ BaseCallGraphData.__index = BaseCallGraphData
 function BaseCallGraphData:new(max_depth)
   local o = setmetatable({}, self)
   o.root_node = nil --- @type FuncNode
-  o.edges = {}      --@type { [edge_id: string] :  Edge }
   o.nodes = {}      --@type { [node_key: string] : GraphNode }, record the generated node to dedup
   o.max_depth = max_depth
 
@@ -21,7 +20,6 @@ end
 
 function BaseCallGraphData:clear_data()
   self.root_node = nil
-  self.edges = {}
   self.nodes = {}
   self._pending_request = 0
   self._parsednodes = {}
@@ -60,7 +58,7 @@ function BaseCallGraphData:gen_call_graph_done()
   self._pending_request = self._pending_request - 1
   if self._pending_request == 0 then
     if self.gen_graph_done_cb then
-      self.gen_graph_done_cb(self.root_node, self.nodes, self.edges)
+      self.gen_graph_done_cb(self.root_node)
     end
   end
 end
