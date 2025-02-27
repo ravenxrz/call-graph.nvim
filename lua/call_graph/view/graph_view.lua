@@ -1,3 +1,4 @@
+-- graph_view.lua
 -- 负责监听用户事件，高亮边，节点，浮动窗口等绘制
 local log = require("call_graph.utils.log")
 local Events = require("call_graph.utils.events")
