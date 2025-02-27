@@ -53,8 +53,10 @@ local function write_log(level, message)
     caller_info = string.format(" [%s]", get_caller_info())
   end
   local log_message = string.format("%s [%s]%s %s\n", get_timestamp(), string.upper(level), caller_info, message)
-  log_file:write(log_message)
-  log_file:flush()
+  if log_file then
+    log_file:write(log_message)
+    log_file:flush()
+  end
 end
 
 local function _setup()

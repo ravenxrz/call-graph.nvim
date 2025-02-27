@@ -1,3 +1,4 @@
+-- graph_drawer.lua
 -- NOTE: 自实现的所有绘图函数采用左开右闭的区间描述
 local GraphDrawer = {}
 local Edge = require("call_graph.class.edge")
@@ -64,7 +65,7 @@ local function ensure_buffer_line_has_cols(self, line, required_col)
   end
 end
 
-local function draw_node(self, node)
+function GraphDrawer:draw_node(node)
   -- if node.panted then
   --   return
   -- end
@@ -73,7 +74,6 @@ local function draw_node(self, node)
   ensure_buffer_line_has_cols(self, node.row, node.col + #node.text)
   vim.api.nvim_buf_set_text(self.bufnr, node.row, node.col, node.row, node.col + #node.text, { node.text })
 end
-
 
 ---@class Direction
 local Direction = {
@@ -87,7 +87,7 @@ local Direction = {
 --- @param end_row integer, exclusive
 --- @param col integer, column
 --- @param direction string, which direction
-local function draw_v_line(self, start_row, end_row, col, direction)
+function GraphDrawer:draw_v_line(start_row, end_row, col, direction)
   assert(start_row <= end_row, string.format("start_row: %d, end_row: %d", start_row, end_row))
 
   ensure_buffer_has_lines(self, end_row)
@@ -117,7 +117,7 @@ end
 --- @param start_col integer, start of col
 --- @param end_col integer, end of cold , exclusive
 --- @param direction string, which direction
-local function draw_h_line(self, row, start_col, end_col, direction)
+function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
   assert(start_col <= end_col, string.format("start_col: %d, end_col: %d", start_col, end_col))
 
   local length = end_col - start_col
@@ -171,13 +171,13 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
       log.debug(string.format(
         "draw h line(point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
         lhs.row, lhs.col + #lhs.text, rhs.col))
-      draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
+      self:draw_h_line(lhs.row, lhs.col + #lhs.text, rhs.col, Direction.LEFT)
       call_draw_edge_cb(self, rhs, lhs, sub_edges)
     else
       log.debug(string.format(
         "draw h line(point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs.text,
         lhs.row, lhs.col + #lhs.text, rhs.col))
-      draw_h_line(self, lhs.row, lhs.col + #lhs.text, rhs.col, Direction.RIGHT)
+      self:draw_h_line(lhs.row, lhs.col + #lhs.text, rhs.col, Direction.RIGHT)
       call_draw_edge_cb(self, lhs, rhs, sub_edges)
     end
     return
@@ -190,13 +190,13 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
       log.debug(string.format(
         "draw v line(point to lhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, lhs.row + 1, rhs.row))
-      draw_v_line(self, lhs.row + 1, rhs.row, lhs.col, Direction.UP)
+      self:draw_v_line(lhs.row + 1, rhs.row, lhs.col, Direction.UP)
       table.insert(sub_edges, SubEdge:new(lhs.row + 1, lhs.col, rhs.row, rhs.col + 1))
     else
       log.debug(string.format(
         "draw v line (point to rhs), lhs %s, rhs %s, col %d, from row %d to row %d", lhs.text, rhs.text,
         lhs.col, rhs.row + 1, lhs.row))
-      draw_v_line(self, rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
+      self:draw_v_line(rhs.row + 1, lhs.row, lhs.col, Direction.DOWN)
       table.insert(sub_edges, SubEdge:new(rhs.row + 1, lhs.col, lhs.row, rhs.col + 1))
     end
     if point_to_lhs then
@@ -220,13 +220,13 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
       "draw h line from lhs to mid col, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
       rhs.text,
       lhs.row, lhs_end_col, mid_col))
-    draw_h_line(self, lhs.row, lhs_end_col, mid_col, Direction.LEFT)
+    self:draw_h_line(lhs.row, lhs_end_col, mid_col, Direction.LEFT)
   else
     log.debug(string.format(
       "draw h line from lhs to mid col (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text, rhs
       .text,
       lhs.row, lhs_end_col, mid_col))
-    draw_h_line(self, lhs.row, lhs_end_col, mid_col)
+    self:draw_h_line(lhs.row, lhs_end_col, mid_col)
   end
 
   -- 绘制中间列的垂直线
@@ -234,7 +234,7 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
   local v_end = math.max(lhs.row, rhs.row)
   assert(v_start ~= v_end, "v_start: %d, v_end: %d", v_start, v_end)
   log.debug(string.format("draw v line, v_start: %d, v_end: %d, mid_col: %d", v_start, v_end, mid_col - 1))
-  draw_v_line(self, v_start + 1, v_end, mid_col - 1)
+  self:draw_v_line(v_start + 1, v_end, mid_col - 1)
   table.insert(sub_edges, SubEdge:new(v_start + 1, mid_col - 1, v_end, mid_col))
 
   -- 绘制中间列到rhs左侧的水平线
@@ -245,14 +245,14 @@ local function draw_edge(self, lhs, rhs, point_to_lhs, lhs_level_max_col)
       "draw h line from mid col to rhs, (point to lhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
       rhs.text,
       rhs.row, mid_col - 1, rhs_start_col))
-    draw_h_line(self, rhs.row, mid_col - 1, rhs_start_col)
+    self:draw_h_line(rhs.row, mid_col - 1, rhs_start_col)
     call_draw_edge_cb(self, rhs, lhs, sub_edges)
   else
     log.debug(string.format(
       "draw h line from mid col to rhs, (point to rhs), lhs %s, rhs %s, row %d, from col %d to col %d", lhs.text,
       rhs.text,
       rhs.row, mid_col - 1, rhs_start_col))
-    draw_h_line(self, rhs.row, mid_col - 1, rhs_start_col, Direction.RIGHT)
+    self:draw_h_line(rhs.row, mid_col - 1, rhs_start_col, Direction.RIGHT)
     call_draw_edge_cb(self, lhs, rhs, sub_edges)
   end
 end
@@ -277,7 +277,7 @@ function GraphDrawer:draw(root_node)
     if cur_level ~= current.level then
       -- draw pre level nodes
       for _, n in ipairs(cur_level_nodes) do
-        draw_node(self, n)
+        self:draw_node(n)
       end
       -- uadate this level position
       cur_row = 0
@@ -303,7 +303,7 @@ function GraphDrawer:draw(root_node)
     end
   end
   for _, n in ipairs(cur_level_nodes) do
-    draw_node(self, n)
+    self:draw_node(n)
   end
   cur_level_nodes = nil
 
