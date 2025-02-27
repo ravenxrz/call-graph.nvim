@@ -1,88 +1,26 @@
 -- 发起lsp reference call请求，构建绘图数据结构
+local BaseCallGraphData = require("call_graph.data.base_call_graph_data")
 local log = require("call_graph.utils.log")
-local FuncNode = require("call_graph.class.func_node")
-local GraphNode = require("call_graph.class.graph_node")
 local Edge = require("call_graph.class.edge")
 
-local CallGraphData = {}
-CallGraphData.__index = CallGraphData
+local ReferenceCallGraphData = setmetatable({}, { __index = BaseCallGraphData })
+ReferenceCallGraphData.__index = ReferenceCallGraphData
 
+ReferenceCallGraphData.request_method = "textDocument/references"
 
--- forward declare
-local generate_call_graph_from_node
-
-function CallGraphData:new(max_depth)
-  local o              = setmetatable({}, CallGraphData)
-  o.root_node          = nil --- @type FuncNode
-  o.edges              = {}  --@type { [edge_id: string] :  Edge }
-  o.nodes              = {}  --@type { [node_key: string] : GraphNode }, record the generated node to dedup
-  o.ref_call_max_depth = max_depth
-
-  o._pending_request   = 0
-  o._parsednodes       = {} -- record the node has been called generate call graph
-  return o
+function ReferenceCallGraphData:new(max_depth)
+  return BaseCallGraphData.new(self, max_depth)
 end
 
--- TODO(zhangxingrui): any way not to rewrite this again?
--- TODO(zhangxingrui): refactor a base class
-function CallGraphData:clear_data()
-  self.root_node = nil   --- @type FuncNode
-  self.edges = {}        --@type { [edge_id: string] :  Edge }
-  self.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
-  self._pending_request = 0
-  self._parsednodes = {} -- record the node has been called generate call graph
+function ReferenceCallGraphData:get_request_params(fnode)
+  return {
+    textDocument = fnode.attr.pos_params.textDocument,
+    position = fnode.attr.pos_params.position,
+    context = {
+      includeDeclaration = false -- 是否包含声明信息
+    }
+  }
 end
-
-local function make_node_key(uri, line, func_name)
-  local file_path = vim.uri_to_fname(uri)
-  local file_name = vim.fn.fnamemodify(file_path, ":t")
-  local node_text = string.format("%s/%s:%d", func_name, file_name, line + 1)
-  return node_text
-end
-
----@param node_key string
----@return boolean
-local function is_gnode_exist(self, node_key)
-  return self.nodes[node_key] ~= nil
-end
-
----@param node_key string
----@param node GraphNode
-local function regist_gnode(self, node_key, node)
-  assert(not is_gnode_exist(self, node_key), "node already exist")
-  self.nodes[node_key] = node
-end
-
----@param node_key string
-local function is_parsed_node_exsit(self, node_key)
-  return self._parsednodes[node_key] ~= nil
-end
-
----@param node_key string
----@param pasred_node GraphNode
-local function regist_parsed_node(self, node_key, pasred_node)
-  assert(not is_parsed_node_exsit(self, node_key), "node already exist")
-  self._parsednodes[node_key] = pasred_node
-end
-
----@param node_text string
----@param attr any
----@return GraphNode
-local function make_graph_node(node_text, attr)
-  local func_node = FuncNode:new(node_text, attr)
-  local graph_node = GraphNode:new(node_text, func_node)
-  return graph_node
-end
-
-local function gen_call_graph_done(self)
-  self._pending_request = self._pending_request - 1
-  if self._pending_request == 0 then
-    if self.gen_graph_done_cb then
-      self.gen_graph_done_cb(self.root_node, self.nodes, self.edges)
-    end
-  end
-end
-
 
 local function get_ref_func_symbol(uri, range)
   local parser_configs = require "nvim-treesitter.parsers".get_parser_configs()
@@ -220,20 +158,19 @@ local function get_ref_func_symbol(uri, range)
   return nil
 end
 
-local function ref_call_handler(err, result, _, my_ctx)
-  local self = my_ctx.self
+function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
   local from_node = my_ctx.from_node
   local fnode = from_node.usr_data
   local depth = my_ctx.depth
 
   if err then
-    gen_call_graph_done(self)
+    self:gen_call_graph_done()
     log.warn("Error getting references: " .. err.message, "call info", fnode.node_key)
     return
   end
 
   if not result or #result == 0 then
-    gen_call_graph_done(self)
+    self:gen_call_graph_done()
     vim.notify(string.format("No references found of %s", fnode.node_key), vim.log.levels.DEBUG)
     return
   end
@@ -253,12 +190,12 @@ local function ref_call_handler(err, result, _, my_ctx)
       local symbol_start = symbol_range.start
 
       -- 创建或获取目标节点
-      local node_text = make_node_key(uri, symbol_start.line, symbol.name)
+      local node_text = self:make_node_key(uri, symbol_start.line, symbol.name)
       local node
-      if is_gnode_exist(self, node_text) then
+      if self:is_gnode_exist(node_text) then
         node = self.nodes[node_text]
       else
-        node = make_graph_node(node_text, {
+        node = self:make_graph_node(node_text, {
           pos_params = {
             textDocument = {
               uri = uri
@@ -266,7 +203,7 @@ local function ref_call_handler(err, result, _, my_ctx)
             position = symbol_start
           }
         })
-        regist_gnode(self, node_text, node)
+        self:regist_gnode(node_text, node)
       end
 
       if caller[node_text] == nil then -- 避免重复分析同一个节点
@@ -291,88 +228,17 @@ local function ref_call_handler(err, result, _, my_ctx)
   end
 
   -- 递归生成调用图
-  if depth < self.ref_call_max_depth - 1 then
+  if depth < self.max_depth - 1 then
     for _, child in pairs(from_node.children) do
       local child_node_key = child.usr_data.node_key
-      if not is_parsed_node_exsit(self, child_node_key) then
+      if not self:is_parsed_node_exsit(child_node_key) then
         log.info("try generate call graph of node", child_node_key)
         self._pending_request = self._pending_request + 1
-        generate_call_graph_from_node(self, child, depth + 1)
+        BaseCallGraphData.generate_call_graph_from_node(self, child, depth + 1)
       end
     end
   end
-  gen_call_graph_done(self)
+  self:gen_call_graph_done()
 end
 
-
-
-local function find_buf_client()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local clients = vim.lsp.get_clients({ bufnr = bufnr })
-  if #clients == 0 then
-    return nil
-  end
-  -- found one client support callHierarchy/incomingCalls
-  local client = nil
-  for _, c in ipairs(clients) do
-    if c.supports_method("textDocument/references") then
-      client = c
-      break
-    end
-  end
-  return client
-end
-
----@param gnode GraphNode
----@param depth integer
-generate_call_graph_from_node = function(self, gnode, depth)
-  local fnode = gnode.usr_data
-  if is_parsed_node_exsit(self, fnode.node_key) then
-    gen_call_graph_done(self)
-    return
-  end
-  regist_parsed_node(self, fnode.node_key, gnode)
-  log.info("generate call graph of node", gnode.text)
-  -- find client
-  local client = find_buf_client()
-  if client == nil then
-    vim.notify("No LSP client found or current lsp does not support this operation", vim.log.levels.WARN)
-    gen_call_graph_done(self)
-    return
-  end
-
-  local params = {
-    textDocument = fnode.attr.pos_params.textDocument,
-    position = fnode.attr.pos_params.position,
-    context = {
-      includeDeclaration = false -- 是否包含声明信息
-    }
-  }
-  client.request("textDocument/references", params, function(err, result, _)
-    ref_call_handler(err, result, nil, {
-      self = self,
-      from_node = gnode,
-      depth = depth
-    })
-  end)
-end
-
-function CallGraphData:generate_call_graph(gen_graph_done_cb, reuse_data)
-  self.gen_graph_done_cb = gen_graph_done_cb
-  local pos_params = vim.lsp.util.make_position_params()
-  local func_name = vim.fn.expand("<cword>")
-  local root_text = make_node_key(pos_params.textDocument.uri, pos_params.position.line, func_name)
-  local from_node
-  if reuse_data and is_gnode_exist(self, root_text) then
-    from_node = self.nodes[root_text]
-  else
-    self:clear_data()
-    self.root_node = make_graph_node(root_text, { pos_params = pos_params })
-    regist_gnode(self, root_text, self.root_node)
-    from_node = self.root_node
-  end
-  self._pending_request = self._pending_request + 1
-  generate_call_graph_from_node(self, from_node, 1)
-end
-
-return CallGraphData
+return ReferenceCallGraphData
