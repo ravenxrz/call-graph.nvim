@@ -15,17 +15,18 @@ function MermaidGraph.export(root_node, output_path)
     "classDef endNode fill:#fcc,stroke:#333,stroke-width:2px"
   }
 
-  local visit = {}
-  local edge_traverse = {}
-  local node_aliases = {} -- 存储节点别名
-  local node_names = {}   -- 存储节点名称，用于避免重复定义
+  local visited_nodes = {}
+  local processed_edges = {}
+  local node_aliases = {}
+  local node_names = {}
+
   alias_counter = 0
 
-  local function traverse(node)
-    if visit[node.nodeid] then
+  local function process_node(node)
+    if visited_nodes[node.nodeid] then
       return
     end
-    visit[node.nodeid] = true
+    visited_nodes[node.nodeid] = true
 
     local node_name = node.text
     if not node_name or node_name == "" then
@@ -38,75 +39,99 @@ function MermaidGraph.export(root_node, output_path)
     end
     local node_alias = node_aliases[node.nodeid]
 
-    -- 添加节点定义，如果尚未定义
+    -- 添加节点定义
     if not node_names[node_name] then
       node_names[node_name] = true
       table.insert(graph, string.format("%s[\"%s\"]", node_alias, node_name))
     end
 
-    if node.children == nil or #node.children == 0 then
+    -- 判断是否为结束节点
+    if #node.incoming_edges == 0 and #node.outcoming_edges == 0 then
       table.insert(graph, string.format("class %s endNode", node_alias))
     end
 
-    for _, child in pairs(node.children) do
-      local child_name = child.text
-      if not child_name or child_name == "" then
-        goto continue
-      end
+    -- 处理出边
+    for _, edge in ipairs(node.outcoming_edges) do
+      local target_node = edge.to_node
+      local target_name = target_node.text
+      if target_name and target_name ~= "" and not target_name:find('test') then
+        -- 为目标节点生成别名
+        if not node_aliases[target_node.nodeid] then
+          node_aliases[target_node.nodeid] = generate_alias(target_name)
+        end
+        local target_alias = node_aliases[target_node.nodeid]
 
-      if not child_name:find('test') then
-        -- 为子节点生成别名
-        if not node_aliases[child.nodeid] then
-          node_aliases[child.nodeid] = generate_alias(child_name)
+        -- 添加目标节点定义
+        if not node_names[target_name] then
+          node_names[target_name] = true
+          table.insert(graph, string.format("%s[\"%s\"]", target_alias, target_name))
         end
-        local child_alias = node_aliases[child.nodeid]
-        -- 添加子节点定义，如果尚未定义
-        if not node_names[child_name] then
-          node_names[child_name] = true
-          table.insert(graph, string.format("%s[\"%s\"]", child_alias, child_name))
-        end
-        log.info(string.format("node:%s has child:%s", node_name, child_name))
-        local edge_text = string.format("%s --> %s", child_alias, node_alias) -- 使用别名连接
-        if not edge_traverse[edge_text] then
-          edge_traverse[edge_text] = true
-          table.insert(graph, edge_text)
-          traverse(child)
+
+        -- 构建边的字符串
+        local edge_str = string.format("%s --> %s", node_alias, target_alias)
+        if not processed_edges[edge_str] then
+          processed_edges[edge_str] = true
+          table.insert(graph, edge_str)
+          process_node(target_node)
         end
       end
-
-      ::continue::
     end
 
-    visit[node.nodeid] = false
+    -- 处理入边
+    for _, edge in ipairs(node.incoming_edges) do
+      local source_node = edge.from_node
+      local source_name = source_node.text
+      if source_name and source_name ~= "" and not source_name:find('test') then
+        -- 为源节点生成别名
+        if not node_aliases[source_node.nodeid] then
+          node_aliases[source_node.nodeid] = generate_alias(source_name)
+        end
+        local source_alias = node_aliases[source_node.nodeid]
+
+        -- 添加源节点定义
+        if not node_names[source_name] then
+          node_names[source_name] = true
+          table.insert(graph, string.format("%s[\"%s\"]", source_alias, source_name))
+        end
+
+        -- 构建边的字符串
+        local edge_str = string.format("%s --> %s", source_alias, node_alias)
+        if not processed_edges[edge_str] then
+          processed_edges[edge_str] = true
+          table.insert(graph, edge_str)
+          process_node(source_node)
+        end
+      end
+    end
   end
 
   -- 处理根节点
-  local root_node_name = root_node.text
-  if not root_node_name or root_node_name == "" then
-    return
+  local root_name = root_node.text
+  if root_name and root_name ~= "" then
+    -- 为根节点生成别名
+    if not node_aliases[root_node.nodeid] then
+      node_aliases[root_node.nodeid] = generate_alias(root_name)
+    end
+    local root_alias = node_aliases[root_node.nodeid]
+
+    -- 添加根节点定义
+    if not node_names[root_name] then
+      node_names[root_name] = true
+      table.insert(graph, string.format("%s[\"%s\"]", root_alias, root_name))
+    end
+
+    table.insert(graph, string.format("class %s startNode", root_alias))
+
+    process_node(root_node)
   end
 
-  -- 为根节点生成别名
-  if not node_aliases[root_node.nodeid] then
-    node_aliases[root_node.nodeid] = generate_alias(root_node_name)
-  end
-  local root_node_alias = node_aliases[root_node.nodeid]
-
-  -- 添加根节点定义
-  if not node_names[root_node_name] then
-    node_names[root_node_name] = true
-    table.insert(graph, string.format("%s[\"%s\"]", root_node_alias, root_node_name))
-  end
-
-  table.insert(graph, string.format("class %s startNode", root_node_alias))
-
-  traverse(root_node)
-
-  -- output to a file
+  -- 输出到文件
   output_path = output_path or ".call_graph.mermaid"
   local file = io.open(output_path, "w")
-  file:write(table.concat(graph, "\n"))
-  file:close()
+  if file then
+    file:write(table.concat(graph, "\n"))
+    file:close()
+  end
 end
 
 return MermaidGraph
