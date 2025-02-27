@@ -15,9 +15,6 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
       graph = nil
     },
     namespace_id = vim.api.nvim_create_namespace('call_graph'), -- for highlight
-    last_cursor_hold = {
-      node = nil
-    },
     hl_delay_ms = hl_delay_ms or 200,
     toggle_auto_hl = toogle_hl,
     last_hl_time_ms = 0,
@@ -49,7 +46,6 @@ function CallGraphView:clear_view()
     clear_all_hl_edge(self)
     self.buf.graph:set_modifiable(false)
   end
-  self.last_cursor_hold = { node = nil }
   self.last_hl_time_ms = 0
   self.ext_marks_id = {
     edge = {}
@@ -330,15 +326,6 @@ local function cursor_hold_cb(row, col, ctx)
   if now - self.last_hl_time_ms < self.hl_delay_ms then
     return
   end
-  -- check overlap with last node or not
-  if self.last_cursor_hold.node ~= nil and overlap_node(row, col, self.last_cursor_hold.node) then
-    log.debug(string.format("row:%d col:%d overlap with node:%s, node position:%d,%d,%d,%d", row, col,
-      self.last_cursor_hold.node.text, self.last_cursor_hold.node.row, self.last_cursor_hold.node.col,
-      self.last_cursor_hold.node.row + 1,
-      self.last_cursor_hold.node.col + #self.last_cursor_hold.node.text))
-    return
-  end
-  self.last_cursor_hold.node = nil
   self.last_hl_time_ms = now
   -- clear hl, redraw hl
   clear_all_hl_edge(self)
@@ -354,7 +341,6 @@ local function cursor_hold_cb(row, col, ctx)
     log.info(string.format("row:%d col:%d overlap with node:%s node position:%d,%d,%d,%d", row, col, target_node.text,
       target_node
       .row, target_node.col, target_node.row + 1, target_node.col + #target_node.text))
-    self.last_cursor_hold.node = target_node
     -- hl incoming
     for _, edge in pairs(target_node.incoming_edges) do
       if not hl_edge(self, edge) then
