@@ -478,4 +478,228 @@ describe("GraphDrawer", function()
     end
     assert.is.True(ret)
   end)
+
+
+  it("should draw a 3 - level graph with specific node configuration using outcoming edges", function()
+    -- 定义根节点
+    local root_node = {
+      row = 0,
+      col = 0,
+      text = "RootNode",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {}
+    }
+
+    -- 定义第二层的 3 个节点
+    local child1_node = {
+      row = 0,
+      col = 0,
+      text = "Child1Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {}
+    }
+
+    local child2_node = {
+      row = 0,
+      col = 0,
+      text = "ThisIsALongTextNodeWithMoreThanTwentyChars",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 3,
+      usr_data = {}
+    }
+
+    local child3_node = {
+      row = 0,
+      col = 0,
+      text = "Child3Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 4,
+      usr_data = {}
+    }
+
+    -- 定义第三层的节点
+    local grandchild_node = {
+      row = 0,
+      col = 0,
+      text = "GrandChildNode",
+      level = 3,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 5,
+      usr_data = {}
+    }
+
+    -- 连接根节点和第二层的节点
+    local edge1 = Edge:new(root_node, child1_node, nil, {})
+    table.insert(root_node.outcoming_edges, edge1)
+    table.insert(child1_node.incoming_edges, edge1)
+
+    local edge2 = Edge:new(root_node, child2_node, nil, {})
+    table.insert(root_node.outcoming_edges, edge2)
+    table.insert(child2_node.incoming_edges, edge2)
+
+    local edge3 = Edge:new(root_node, child3_node, nil, {})
+    table.insert(root_node.outcoming_edges, edge3)
+    table.insert(child3_node.incoming_edges, edge3)
+
+    -- 连接第二层的第二个节点和第三层的节点
+    local edge4 = Edge:new(child2_node, grandchild_node, nil, {})
+    table.insert(child2_node.outcoming_edges, edge4)
+    table.insert(grandchild_node.incoming_edges, edge4)
+
+    local edge5 = Edge:new(child3_node, grandchild_node, nil, {})
+    table.insert(child3_node.outcoming_edges, edge5)
+    table.insert(grandchild_node.incoming_edges, edge5)
+
+    -- 假设这里创建了一个 buffer 用于绘制图形
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    local graph_drawer = GraphDrawer:new(bufnr, {
+      cb = function() end,
+      cb_ctx = {}
+    })
+
+    -- 绘制图形
+    graph_drawer:draw(root_node, false)
+
+    -- 获取绘制后的行
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+    -- 这里可以根据预期的图形输出定义 model_lines
+    -- 由于具体的图形布局可能比较复杂，这里只是简单示例，你需要根据实际情况修改
+    local model_lines = {
+      "RootNode---->Child1Node                                 --->GrandChildNode",
+      "          |                                             ||",
+      "          |                                             ||",
+      "          -->ThisIsALongTextNodeWithMoreThanTwentyChars---",
+      "          |                                             |",
+      "          |                                             |",
+      "          -->Child3Node----------------------------------",
+    }
+    local ret = table_eq(model_lines, lines)
+    if not ret then
+      assert.equal(lines, model_lines) -- get a pretty print
+    end
+    assert.is.True(ret)
+  end)
+
+  it("should draw a 3 - level graph with specific node configuration using incoming edges", function()
+    -- 定义根节点
+    local root_node = {
+      row = 0,
+      col = 0,
+      text = "RootNode",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {}
+    }
+
+    -- 定义第二层的 3 个节点
+    local child1_node = {
+      row = 0,
+      col = 0,
+      text = "Child1Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {}
+    }
+
+    local child2_node = {
+      row = 0,
+      col = 0,
+      text = "ThisIsALongTextNodeWithMoreThanTwentyChars",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 3,
+      usr_data = {}
+    }
+
+    local child3_node = {
+      row = 0,
+      col = 0,
+      text = "Child3Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 4,
+      usr_data = {}
+    }
+
+    -- 定义第三层的节点
+    local grandchild_node = {
+      row = 0,
+      col = 0,
+      text = "GrandChildNode",
+      level = 3,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 5,
+      usr_data = {}
+    }
+
+    -- 连接第二层节点到根节点（反向连接）
+    local edge1 = Edge:new(child1_node, root_node, nil, {})
+    table.insert(child1_node.outcoming_edges, edge1)
+    table.insert(root_node.incoming_edges, edge1)
+
+    local edge2 = Edge:new(child2_node, root_node, nil, {})
+    table.insert(child2_node.outcoming_edges, edge2)
+    table.insert(root_node.incoming_edges, edge2)
+
+    local edge3 = Edge:new(child3_node, root_node, nil, {})
+    table.insert(child3_node.outcoming_edges, edge3)
+    table.insert(root_node.incoming_edges, edge3)
+
+    -- 连接第三层节点到第二层的第二个节点和第三个节点（反向连接）
+    local edge4 = Edge:new(grandchild_node, child2_node, nil, {})
+    table.insert(grandchild_node.outcoming_edges, edge4)
+    table.insert(child2_node.incoming_edges, edge4)
+
+    local edge5 = Edge:new(grandchild_node, child3_node, nil, {})
+    table.insert(grandchild_node.outcoming_edges, edge5)
+    table.insert(child3_node.incoming_edges, edge5)
+
+    -- 假设这里创建了一个 buffer 用于绘制图形
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    local graph_drawer = GraphDrawer:new(bufnr, {
+      cb = function() end,
+      cb_ctx = {}
+    })
+
+    -- 绘制图形，使用 incoming edge 进行遍历
+    graph_drawer:draw(root_node, true)
+
+    -- 获取绘制后的行
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+    -- 这里根据 incoming edge 遍历的预期输出定义 model_lines
+    local model_lines = {
+      'RootNode<----Child1Node                                 ----GrandChildNode',
+      '          |                                             ||',
+      '          |                                             ||',
+      '          ---ThisIsALongTextNodeWithMoreThanTwentyChars<--',
+      '          |                                             |',
+      '          |                                             |',
+      '          ---Child3Node<---------------------------------', }
+
+    local ret = table_eq(model_lines, lines)
+    if not ret then
+      assert.equal(lines, model_lines) -- get a pretty print
+    end
+    assert.is.True(ret)
+  end)
 end)

@@ -157,7 +157,7 @@ local function call_draw_edge_cb(self, from_node, to_node, sub_edges)
   end
 end
 
-local function draw_edge(self, from_node, to_node, from_level_max_col)
+local function draw_edge(self, from_node, to_node, lhs_level_max_col)
   local lhs, rhs
   if from_node.col <= to_node.col then
     lhs = from_node
@@ -166,7 +166,6 @@ local function draw_edge(self, from_node, to_node, from_level_max_col)
     lhs = to_node
     rhs = from_node
   end
-  -- 始终认为箭头从 from_node 指向 to_node
   local point_to_rhs = from_node == lhs
 
   local fill_start_col = 0
@@ -213,7 +212,12 @@ local function draw_edge(self, from_node, to_node, from_level_max_col)
   -- 处理不同行不同列的情况：绘制L型连线
   local lhs_end_col = lhs.col + #lhs.text
   local rhs_start_col = rhs.col
-  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), from_level_max_col + 1) + 1
+  assert(lhs_end_col <= rhs_start_col, string.format("lhs_end_col: %d, rhs_start_col: %d", lhs_end_col, rhs_start_col))
+  local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1) + 1
+  assert(mid_col <= rhs_start_col,
+    string.format("from:%s to %s lhs end col:%d mid_col: %d, rhs_start_col: %d, from_level_max_col:%d", from_node.text,
+      to_node.text, lhs_end_col, mid_col,
+      rhs_start_col, lhs_level_max_col))
 
   -- 绘制lhs到中间列的水平线
   assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
@@ -223,7 +227,11 @@ local function draw_edge(self, from_node, to_node, from_level_max_col)
     point_to_rhs and "rhs" or "lhs", lhs.text,
     rhs.text,
     lhs.row, lhs_end_col, mid_col))
-  self:draw_h_line(lhs.row, lhs_end_col, mid_col)
+  if point_to_rhs then
+    self:draw_h_line(lhs.row, lhs_end_col, mid_col)
+  else
+    self:draw_h_line(lhs.row, lhs_end_col, mid_col, Direction.LEFT)
+  end
 
   -- 绘制中间列的垂直线
   local v_start = math.min(lhs.row, rhs.row)
@@ -279,7 +287,7 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
     end
     current.row = cur_row
     current.col = cur_col
-    log.debug("set node pos", current.text, "level", current.level, "row", current.row, "col", current.col)
+    log.info("set node pos", current.text, "level", current.level, "row", current.row, "col", current.col)
     table.insert(cur_level_nodes, current)
     cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + #current.text)
     cur_row = cur_row + self.row_spacing
@@ -291,7 +299,7 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
       local child = traverse_by_incoming and edge.from_node or edge.to_node
       if not added[child.nodeid] then
         added[child.nodeid] = true
-        child.level = current.level + (traverse_by_incoming and -1 or 1)
+        child.level = current.level + 1
         table.insert(queue, child)
       end
     end
@@ -314,12 +322,16 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
       log.debug("child of node", node.text, "node id", node.nodeid, "child", child.text, "node id", child.nodeid,
         "draw edge between", node.text, child.text,
         string.format("row %d col %d, row %d col %d", node.row, node.col, child.row, child.col))
-      if node.nodeid == child.nodeid then
+      local from_node, to_node = edge.from_node, edge.to_node
+      if from_node.nodeid == to_node.nodeid then
         log.warn("node", node.text, "node id", node.nodeid, "has same id with child", child.text, "node id")
         return
       end
-      local from_node, to_node = edge.from_node, edge.to_node
-      draw_edge(self, from_node, to_node, cur_level_max_col[node.level])
+      if from_node.col <= to_node.col then -- from node is on the lhs
+        draw_edge(self, from_node, to_node, cur_level_max_col[from_node.level])
+      else                                 -- from node is on the rhs
+        draw_edge(self, from_node, to_node, cur_level_max_col[to_node.level])
+      end
       if not visit[child.nodeid] then
         traverse(child)
       end
@@ -332,4 +344,3 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
 end
 
 return GraphDrawer
-
