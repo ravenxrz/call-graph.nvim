@@ -23,7 +23,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
   local depth = my_ctx.depth
 
   if err then
-    vim.notify("Error preparing call hierarchy: " .. err.message, vim.log.levels.ERROR)
+    log.error("Error preparing call hierarchy: " .. err.message)
     self:gen_call_graph_done()
     return
   end
@@ -44,7 +44,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
 
   client.request("callHierarchy/incomingCalls", { item = item }, function(err, result)
     if err then
-      vim.notify("Error getting incoming calls: " .. err.message, vim.log.levels.ERROR)
+      log.info("Error getting incoming calls: " .. err.message)
       self:gen_call_graph_done()
       return
     end
@@ -125,4 +125,3 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
 end
 
 return IncomingCallGraphData
-
