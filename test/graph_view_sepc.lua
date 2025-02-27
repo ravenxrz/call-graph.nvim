@@ -1,6 +1,7 @@
 local CallGraphView = require("call_graph.view.graph_view")
 local plenary = require("plenary")
 
+
 local mock_Log = {
     debug = function(...) end,
     info = function(...) end,
@@ -37,7 +38,7 @@ describe("CallGraphView", function()
     before_each(function()
         view = CallGraphView:new(200, true)
     end)
-
+    
     it("should create a new CallGraphView instance", function()
         assert.is.truthy(view)
         assert.equal(view.hl_delay_ms, 200)

@@ -33,20 +33,14 @@ end
 
 local function clear_all_hl_edge(self)
   log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
-  -- for _, id in ipairs(self.ext_marks_id.edge) do
-  --   vim.api.nvim_buf_del_extmark(self.buf.bufid, self.namespace_id, id)
-  -- end
   vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
-  self.ext_marks_id.edge = {
-    edge = {}
-  }
+  self.ext_marks_id.edge = {}
 end
 
 local function clear_all_lines(self)
   local line_count = vim.api.nvim_buf_line_count(self.buf.bufid)
   vim.api.nvim_buf_set_lines(self.buf.bufid, 0, line_count, false, {})
 end
-
 
 function CallGraphView:clear_view()
   if self.buf.graph then
@@ -74,16 +68,6 @@ function CallGraphView:reuse_buf(bufid)
   self.buf.bufid = bufid
 end
 
--- local function print_caller_info()
---   local info = debug.getinfo(3, "Sl") -- 2 表示上一层 caller，"Sl" 表示获取 source 和 line 信息
---   if info then
---     log.error("Caller file: " .. (info.source or "unknown"))
---     log.error("Caller line: " .. (info.linedefined or "unknown"))
---   else
---     log.error("No caller information available.")
---   end
--- end
-
 local function hl_edge(self, edge)
   if edge.sub_edges == nil then
     log.error("hl: find nil sub edges", edge:to_string())
@@ -103,8 +87,6 @@ local function hl_edge(self, edge)
   end
   return true
 end
-
-
 
 local function overlap_node(row, col, node)
   return node.row == row and node.col <= col and col < node.col + #node.text
@@ -290,28 +272,31 @@ local function show_node_info(row, col, ctx)
   local self = ctx.self
   local nodes = ctx.nodes
   assert(self ~= nil, "")
+
   -- who calls this node
   local get_callers = function(node)
     local callers = {}
-    for _, c in ipairs(node.children) do
-      table.insert(callers, "- " .. c.text)
+    for _, edge in ipairs(node.incoming_edges) do
+      table.insert(callers, "- " .. edge.from_node.text)
     end
     return callers
   end
+
   -- node calls who?
-  local get_calls = function(node)
-    local calls = {}
-    for _, c in ipairs(node.calls) do
-      table.insert(calls, " - " .. c.text)
+  local get_callees = function(node)
+    local callees = {}
+    for _, edge in ipairs(node.outcoming_edges) do
+      table.insert(callees, " - " .. edge.to_node.text)
     end
-    return calls
+    return callees
   end
+
   -- overlap with nodes?
   log.debug("compare node")
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
-      vim.notify(string.format("find overlap nodes num is not 1, skip show full path, actual num", #overlaps_nodes),
+      vim.notify(string.format("find overlap nodes num is not 1, skip show full path, actual num %d", #overlaps_nodes),
         vim.log.levels.WARN)
       return
     end
@@ -327,7 +312,7 @@ local function show_node_info(row, col, ctx)
     if #callers ~= 0 then
       text = string.format("%s\ncallers(%d)\n%s", text, #callers, table.concat(callers, '\n'))
     end
-    local callees = get_calls(target_node)
+    local callees = get_callees(target_node)
     if #callees ~= 0 then
       text = string.format("%s\ncalls(%d)\n%s", text, #callees, table.concat(callees, '\n'))
     end
@@ -425,45 +410,60 @@ local function setup_buf(self, nodes, edges)
   Events.regist_press_cb(self.buf.bufid, show_node_info, { self = self, nodes = nodes }, "K")
 end
 
-local function check_buf_exists(name)
-  local bufs = vim.api.nvim_list_bufs()
-  for _, buf in ipairs(bufs) do
-    local buf_name = vim.api.nvim_buf_get_name(buf)
-    if buf_name == name then
-      return true
-    end
-  end
-  return false
-end
-
 local function collect_nodes_and_edges(root_node)
   local nodes = {}
   local edges = {}
-  local visited = {}
+  local visited_nodes = {}
+  local visited_edges = {}
 
-  local function dfs(node)
-    if visited[node] then
-      return
-    end
-    visited[node] = true
-    table.insert(nodes, node)
-
-    -- 收集入边
-    for _, edge in ipairs(node.incoming_edges or {}) do
-      table.insert(edges, edge)
-    end
-    -- 收集出边
-    for _, edge in ipairs(node.outcoming_edges or {}) do
-      table.insert(edges, edge)
-    end
-
-    -- 递归遍历子节点
-    for _, child in ipairs(node.children or {}) do
-      dfs(child)
+  -- 辅助函数：添加节点到结果集
+  local function add_node(node)
+    if not visited_nodes[node.nodeid] then
+      table.insert(nodes, node)
+      visited_nodes[node.nodeid] = true
     end
   end
 
-  dfs(root_node)
+  -- 辅助函数：添加边到结果集
+  local function add_edge(edge)
+    if not visited_edges[edge.edgeid] then
+      table.insert(edges, edge)
+      visited_edges[edge.edgeid] = true
+    end
+  end
+
+  -- 按照 incoming_edges 遍历
+  local function traverse_incoming(node)
+    if visited_nodes[node.nodeid] then
+      return
+    end
+    add_node(node)
+
+    for _, edge in ipairs(node.incoming_edges or {}) do
+      add_edge(edge)
+      traverse_incoming(edge.from_node)
+    end
+  end
+
+  -- 按照 outcoming_edges 遍历
+  local function traverse_outcoming(node)
+    if visited_nodes[node.nodeid] then
+      return
+    end
+    add_node(node)
+
+    for _, edge in ipairs(node.outcoming_edges or {}) do
+      add_edge(edge)
+      traverse_outcoming(edge.to_node)
+    end
+  end
+
+  -- 先按 incoming_edges 遍历
+  traverse_incoming(root_node)
+
+  -- 再按 outcoming_edges 遍历
+  traverse_outcoming(root_node)
+
   return nodes, edges
 end
 
@@ -473,11 +473,20 @@ function CallGraphView:draw(root_node, reuse_buf)
     return
   end
 
+  -- 检查 root_node 的入边和出边情况
+  local has_incoming_edges = #(root_node.incoming_edges or {}) > 0
+  local has_outcoming_edges = #(root_node.outcoming_edges or {}) > 0
+
+  -- 断言同时有入边和出边的场景
+  -- assert(not (has_incoming_edges and has_outcoming_edges),
+  --   "Root node should have either incoming edges or outcoming edges, not both.")
+
   -- 从 root_node 中收集 nodes 和 edges
   local nodes, edges = collect_nodes_and_edges(root_node)
 
   local Drawer = require("call_graph.view.graph_drawer")
   self:clear_view() -- always redraw everything
+
   if reuse_buf and self.buf.bufid ~= -1 and vim.api.nvim_buf_is_valid(self.buf.bufid) then
     -- 复用已有缓冲区，不重新创建
   else
@@ -487,26 +496,27 @@ function CallGraphView:draw(root_node, reuse_buf)
   vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. '-' .. tonumber(self.view_id))
   setup_buf(self, nodes, edges)
 
-  log.info("generate graph of", root_node.text, "has child num", #root_node.children)
-  for i, child in ipairs(root_node.children) do
-    log.info("child", i, child.text)
-  end
+  log.info("generate graph of", root_node.text)
   log.info("all edge info")
   for _, edge in ipairs(edges) do
     log.info("edge", edge:to_string())
   end
 
-  self.buf.graph = Drawer:new(self.buf.bufid,
-    {
-      cb = draw_edge_cb,
-      cb_ctx = { edges = edges }
-    }
-  )
+  self.buf.graph = Drawer:new(self.buf.bufid, {
+    cb = draw_edge_cb,
+    cb_ctx = { edges = edges }
+  })
   self.buf.graph:set_modifiable(true)
-  self.buf.graph:draw(root_node) -- draw函数完成node在buf中的位置计算（后续可在`goto_event_cb`中判定跳转到哪个node), 和node与edge绘制
+
+  -- 根据入边和出边情况调用 draw 函数
+  if has_incoming_edges then
+    self.buf.graph:draw(root_node, true)  -- 只有入边，使用传入边遍历
+  else
+    self.buf.graph:draw(root_node, false) -- 其余场景
+  end
+
   vim.api.nvim_set_current_buf(self.buf.bufid)
   self.buf.graph:set_modifiable(false)
-
   return self.buf.bufid
 end
 
