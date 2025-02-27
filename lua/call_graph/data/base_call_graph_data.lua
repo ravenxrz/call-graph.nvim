@@ -9,13 +9,13 @@ BaseCallGraphData.__index = BaseCallGraphData
 
 function BaseCallGraphData:new(max_depth)
   local o = setmetatable({}, self)
-  o.root_node = nil   --- @type FuncNode
-  o.edges = {}        --@type { [edge_id: string] :  Edge }
-  o.nodes = {}        --@type { [node_key: string] : GraphNode }, record the generated node to dedup
+  o.root_node = nil --- @type FuncNode
+  o.edges = {}      --@type { [edge_id: string] :  Edge }
+  o.nodes = {}      --@type { [node_key: string] : GraphNode }, record the generated node to dedup
   o.max_depth = max_depth
 
   o._pending_request = 0
-  o._parsednodes = {}   -- record the node has been called generate call graph
+  o._parsednodes = {} -- record the node has been called generate call graph
   return o
 end
 
@@ -113,8 +113,14 @@ function BaseCallGraphData:generate_call_graph(gen_graph_done_cb, reuse_data)
   local func_name = vim.fn.expand("<cword>")
   local root_text = self:make_node_key(pos_params.textDocument.uri, pos_params.position.line, func_name)
   local from_node
-  if reuse_data and self:is_gnode_exist(root_text) then
+  if reuse_data then
     from_node = self.nodes[root_text]
+    if not from_node then
+      self:clear_data()
+      self.root_node = self:make_graph_node(root_text, { pos_params = pos_params })
+      self:regist_gnode(root_text, self.root_node)
+      from_node = self.root_node
+    end
   else
     self:clear_data()
     self.root_node = self:make_graph_node(root_text, { pos_params = pos_params })
@@ -135,4 +141,3 @@ function BaseCallGraphData:call_handler(err, result, _, my_ctx)
 end
 
 return BaseCallGraphData
-
