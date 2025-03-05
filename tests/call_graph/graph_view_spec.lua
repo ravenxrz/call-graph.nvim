@@ -2,18 +2,17 @@ local CallGraphView = require("call_graph.view.graph_view")
 local plenary = require("plenary")
 local Edge = require("call_graph.class.edge")
 
-
 local mock_Log = {
   debug = function(...) end,
   info = function(...) end,
   error = function(...) end,
-  warn = function(...) end
+  warn = function(...) end,
 }
 package.loaded["call_graph.utils.log"] = mock_Log
 
 local mock_Events = {
   regist_press_cb = function(...) end,
-  regist_cursor_hold_cb = function(...) end
+  regist_cursor_hold_cb = function(...) end,
 }
 package.loaded["call_graph.utils.events"] = mock_Events
 
@@ -21,9 +20,9 @@ local mock_Drawer = {
   new = function(...)
     return {
       set_modifiable = function(...) end,
-      draw = function(...) end
+      draw = function(...) end,
     }
-  end
+  end,
 }
 package.loaded["call_graph.view.graph_drawer"] = mock_Drawer
 
@@ -37,7 +36,7 @@ describe("CallGraphView", function()
     incoming_edges = {},
     outcoming_edges = {},
     nodeid = 1,
-    usr_data = {}
+    usr_data = {},
   }
   local node2 = {
     row = 0,
@@ -47,7 +46,7 @@ describe("CallGraphView", function()
     incoming_edges = {},
     outcoming_edges = {},
     nodeid = 2,
-    usr_data = {}
+    usr_data = {},
   }
   local root_node = node1
   local edge = Edge:new(node1, node2, nil, {})

@@ -4,7 +4,7 @@ local log = require("call_graph.utils.log")
 local Events = require("call_graph.utils.events")
 
 local CallGraphView = {
-  view_id = 1
+  view_id = 1,
 }
 CallGraphView.__index = CallGraphView
 
@@ -12,16 +12,16 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
   local defaultConfig = {
     buf = {
       bufid = -1,
-      graph = nil
+      graph = nil,
     },
-    namespace_id = vim.api.nvim_create_namespace('call_graph'), -- for highlight
+    namespace_id = vim.api.nvim_create_namespace("call_graph"), -- for highlight
     hl_delay_ms = hl_delay_ms or 200,
     toggle_auto_hl = toogle_hl,
     last_hl_time_ms = 0,
     ext_marks_id = {
-      edge = {}
+      edge = {},
     },
-    view_id = self.view_id
+    view_id = self.view_id,
   }
   self.view_id = self.view_id + 1
   local o = setmetatable(defaultConfig, CallGraphView)
@@ -48,7 +48,7 @@ function CallGraphView:clear_view()
   end
   self.last_hl_time_ms = 0
   self.ext_marks_id = {
-    edge = {}
+    edge = {},
   }
 end
 
@@ -75,7 +75,7 @@ local function hl_edge(self, edge)
       local id = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.namespace_id, i, sub_edge.start_col, {
         end_row = i,
         end_col = sub_edge.end_col,
-        hl_group = "CallGraphLine"
+        hl_group = "CallGraphLine",
       })
       log.debug("sub edge", sub_edge:to_string(), "id", id)
       table.insert(self.ext_marks_id.edge, id)
@@ -90,8 +90,10 @@ end
 
 local function overlap_edge(row, col, edge)
   for _, sub_edge in ipairs(edge.sub_edges) do
-    if (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col) or
-        (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row) then
+    if
+      (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col)
+      or (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row)
+    then
       return true
     end
   end
@@ -124,7 +126,7 @@ end
 
 local function jumpto(pos_params)
   local uri = pos_params.textDocument.uri
-  local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+  local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
   local character = pos_params.position.character -- Neovim 的列号从 1 开始
   -- 将 URI 转换为文件路径
   local file_path = vim.uri_to_fname(uri)
@@ -292,25 +294,27 @@ local function show_node_info(row, col, ctx)
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
   if #overlaps_nodes ~= 0 then -- find node
     if #overlaps_nodes ~= 1 then
-      vim.notify(string.format("find overlap nodes num is not 1, skip show full path, actual num %d", #overlaps_nodes),
-        vim.log.levels.WARN)
+      vim.notify(
+        string.format("find overlap nodes num is not 1, skip show full path, actual num %d", #overlaps_nodes),
+        vim.log.levels.WARN
+      )
       return
     end
     local target_node = overlaps_nodes[1]
     local fnode = target_node.usr_data
     local pos_params = fnode.attr.pos_params
     local uri = pos_params.textDocument.uri
-    local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+    local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
     local character = pos_params.position.character -- Neovim 的列号从 1 开始
     local file_path = vim.uri_to_fname(uri)
     local text = string.format("%s:%d:%d", file_path, line, character)
     local callers = get_callers(target_node)
     if #callers ~= 0 then
-      text = string.format("%s\ncallers(%d)\n%s", text, #callers, table.concat(callers, '\n'))
+      text = string.format("%s\ncallers(%d)\n%s", text, #callers, table.concat(callers, "\n"))
     end
     local callees = get_callees(target_node)
     if #callees ~= 0 then
-      text = string.format("%s\ncalls(%d)\n%s", text, #callees, table.concat(callees, '\n'))
+      text = string.format("%s\ncalls(%d)\n%s", text, #callees, table.concat(callees, "\n"))
     end
     create_floating_window(self.buf.bufid, text)
     return
@@ -338,9 +342,18 @@ local function cursor_hold_cb(row, col, ctx)
       log.warn("find overlaps nodes num is not 1, use the first node as default")
     end
     local target_node = overlaps_nodes[1]
-    log.info(string.format("row:%d col:%d overlap with node:%s node position:%d,%d,%d,%d", row, col, target_node.text,
-      target_node
-      .row, target_node.col, target_node.row + 1, target_node.col + #target_node.text))
+    log.info(
+      string.format(
+        "row:%d col:%d overlap with node:%s node position:%d,%d,%d,%d",
+        row,
+        col,
+        target_node.text,
+        target_node.row,
+        target_node.col,
+        target_node.row + 1,
+        target_node.col + #target_node.text
+      )
+    )
     -- hl incoming
     for _, edge in pairs(target_node.incoming_edges) do
       if not hl_edge(self, edge) then
@@ -479,7 +492,7 @@ function CallGraphView:draw(root_node, reuse_buf)
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end
 
-  vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. '-' .. tonumber(self.view_id))
+  vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. "-" .. tonumber(self.view_id))
   setup_buf(self, nodes, edges)
 
   log.info("generate graph of", root_node.text)
@@ -490,13 +503,13 @@ function CallGraphView:draw(root_node, reuse_buf)
 
   self.buf.graph = Drawer:new(self.buf.bufid, {
     cb = draw_edge_cb,
-    cb_ctx = { edges = edges }
+    cb_ctx = { edges = edges },
   })
   self.buf.graph:set_modifiable(true)
 
   -- 根据入边和出边情况调用 draw 函数
   if has_incoming_edges then
-    self.buf.graph:draw(root_node, true)  -- 只有入边，使用传入边遍历
+    self.buf.graph:draw(root_node, true) -- 只有入边，使用传入边遍历
   else
     self.buf.graph:draw(root_node, false) -- 其余场景
   end

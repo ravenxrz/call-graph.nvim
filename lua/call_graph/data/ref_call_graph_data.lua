@@ -17,14 +17,14 @@ function ReferenceCallGraphData:get_request_params(fnode)
     textDocument = fnode.attr.pos_params.textDocument,
     position = fnode.attr.pos_params.position,
     context = {
-      includeDeclaration = false -- 是否包含声明信息
-    }
+      includeDeclaration = false, -- 是否包含声明信息
+    },
   }
 end
 
 local function get_ref_func_symbol(uri, range)
-  local parser_configs = require "nvim-treesitter.parsers".get_parser_configs()
-  local parsers = require "nvim-treesitter.parsers"
+  local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
+  local parsers = require("nvim-treesitter.parsers")
 
   -- 将 file:// 协议的 URI 转换为本地文件路径
   local file_path = vim.uri_to_fname(uri) -- 使用 vim.uri_to_fname
@@ -50,7 +50,9 @@ local function get_ref_func_symbol(uri, range)
   local root = tree:root()
 
   -- 遍历语法树，查找函数定义节点
-  local query = vim.treesitter.query.parse(lang, [[
+  local query = vim.treesitter.query.parse(
+    lang,
+    [[
         [
           ;; 普通函数定义
           (function_definition
@@ -106,7 +108,8 @@ local function get_ref_func_symbol(uri, range)
             )
         ) @function.def
         ]
-    ]])
+    ]]
+  )
 
   local current_function_def_node = nil
   for id, node in query:iter_captures(root, bufnr) do
@@ -124,16 +127,14 @@ local function get_ref_func_symbol(uri, range)
       if current_function_def_node then
         local def_start_row, _ = current_function_def_node:start()
         local def_text = vim.treesitter.get_node_text(current_function_def_node, bufnr)
-        local def_end_row = def_start_row + #vim.split(def_text, '\n')
+        local def_end_row = def_start_row + #vim.split(def_text, "\n")
         log.debug("fun_name", name, name_start_row, name_start_col, name_end_row, name_end_col)
         log.debug("whole func", def_start_row, 0, def_end_row, 0)
 
         -- 判断传入的 range 是否在函数定义范围内
         local range_start_row = range.start.line
         local range_end_row = range["end"].line
-        local is_in_range = (
-          range_start_row >= def_start_row and range_end_row < def_end_row
-        )
+        local is_in_range = (range_start_row >= def_start_row and range_end_row < def_end_row)
 
         if is_in_range then
           log.info("find the calling symbol", name)
@@ -142,14 +143,13 @@ local function get_ref_func_symbol(uri, range)
             range = {
               start = {
                 line = name_start_row,
-                character = name_start_col
+                character = name_start_col,
               },
               ["end"] = {
                 line = name_end_row,
-                character = name_end_col
-              }
-            }
-
+                character = name_end_col,
+              },
+            },
           }
         end
       end
@@ -199,10 +199,10 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
         node = self:make_graph_node(node_text, {
           pos_params = {
             textDocument = {
-              uri = uri
+              uri = uri,
             },
-            position = symbol_start
-          }
+            position = symbol_start,
+          },
         })
         self:regist_gnode(node_text, node)
       end
@@ -216,8 +216,8 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
         local call_pos_params = {
           position = ref_start,
           textDocument = {
-            uri = uri
-          }
+            uri = uri,
+          },
         }
         local edge = Edge:new(node, from_node, call_pos_params)
         table.insert(from_node.incoming_edges, edge)

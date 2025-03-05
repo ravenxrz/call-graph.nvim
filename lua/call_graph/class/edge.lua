@@ -1,6 +1,6 @@
 --- @classEdge
 local Edge = {
-  edgeid = 1
+  edgeid = 1,
 }
 Edge.__index = Edge
 
@@ -15,20 +15,22 @@ function Edge:new(from_node, to_node, pos_params, sub_edges)
     to_node = to_node,
     pos_params = pos_params,
     sub_edges = sub_edges,
-    edgeid = self.edgeid
+    edgeid = self.edgeid,
   }, Edge)
   self.edgeid = self.edgeid + 1
   return e
 end
 
 function Edge:is_same_edge(edge)
-    return self.from_node.text == edge.from_node.text and self.to_node.text == edge.to_node.text
+  return self.from_node.text == edge.from_node.text and self.to_node.text == edge.to_node.text
 end
 
 function Edge:to_string()
-  local str = { "edgeid:" .. self.edgeid, "from node:" .. (self.from_node ~= nil and self.from_node.text or "nil"),
-    "to node:" ..
-    (self.to_node ~= nil and self.to_node.text or "nil") }
+  local str = {
+    "edgeid:" .. self.edgeid,
+    "from node:" .. (self.from_node ~= nil and self.from_node.text or "nil"),
+    "to node:" .. (self.to_node ~= nil and self.to_node.text or "nil"),
+  }
   if self.sub_edges then
     for _, sub_edge in pairs(self.sub_edges) do
       table.insert(str, sub_edge:to_string())

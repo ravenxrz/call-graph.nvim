@@ -72,14 +72,14 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
           position = nil,
           textDocument = {
             uri = from_uri,
-          }
+          },
         }
       else
         call_pos_params = {
           position = call.fromRanges[1].start,
           textDocument = {
             uri = from_uri,
-          }
+          },
         }
       end
 
@@ -93,8 +93,8 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
             textDocument = {
               uri = from_uri,
             },
-            position = node_pos
-          }
+            position = node_pos,
+          },
         })
         self:regist_gnode(node_text, node)
       end

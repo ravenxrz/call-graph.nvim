@@ -10,7 +10,7 @@ local Caller = {}
 Caller.CallType = {
   _NO_CALl = 0,
   INCOMING_CALL = 1,
-  REFERENCE_CALL = 2
+  REFERENCE_CALL = 2,
 }
 
 Caller.__index = Caller
@@ -19,7 +19,6 @@ local g_caller = nil
 local last_call_type = Caller.CallType._NO_CALl
 local last_buf_id = -1
 local mermaid_path = ".call_graph.mermaid"
-
 
 --- Creates a new caller instance.
 ---@param data ICallGraphData|RCallGraphData The call graph data object.
@@ -31,7 +30,6 @@ local function create_caller(data, view)
   o.view = view
   return o
 end
-
 
 function Caller.new_incoming_call(hl_delay_ms, toogle_hl, max_depth)
   local data = ICallGraphData:new(max_depth)
@@ -106,7 +104,7 @@ function Caller.get_caller(opts, call_type)
     -- Create a new caller
     local caller = Caller.create_new_caller(opts, call_type)
     if view then
-      caller.view = view       -- restore view state
+      caller.view = view -- restore view state
     end
 
     g_caller = caller
