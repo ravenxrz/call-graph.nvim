@@ -21,7 +21,7 @@ describe("GraphDrawer", function()
   local graph_drawer
   local draw_edge_cb = {
     cb = function() end,
-    cb_ctx = {}
+    cb_ctx = {},
   }
 
   before_each(function()
@@ -59,7 +59,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
     graph_drawer:draw_node(node)
     local line = vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
@@ -91,7 +91,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
     local node2 = {
       row = 0,
@@ -101,7 +101,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local edge = Edge:new(node1, node2, nil, {})
     table.insert(node1.outcoming_edges, edge)
@@ -121,7 +121,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
     local node2 = {
       row = 0,
@@ -131,7 +131,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local edge = Edge:new(node2, node1, nil, {})
     table.insert(node1.incoming_edges, edge)
@@ -151,7 +151,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 4,
-      usr_data = {}
+      usr_data = {},
     }
     local level3_node = {
       row = 0,
@@ -161,7 +161,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
     local level2_node = {
       row = 0,
@@ -171,7 +171,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local root_node = {
       row = 0,
@@ -181,7 +181,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(level2_node, level3_node, nil, {})
@@ -211,7 +211,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 4,
-      usr_data = {}
+      usr_data = {},
     }
     local level3_node = {
       row = 0,
@@ -221,7 +221,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
     local level2_node = {
       row = 0,
@@ -231,7 +231,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local root_node = {
       row = 0,
@@ -241,7 +241,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(level3_node, level2_node, nil, {})
@@ -271,7 +271,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local child2_node = {
       row = 0,
@@ -281,7 +281,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
     local root_node = {
       row = 0,
@@ -291,7 +291,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(root_node, child1_node, nil, {})
@@ -308,7 +308,7 @@ describe("GraphDrawer", function()
       "RootNode---->Child1Node",
       "          |",
       "          |",
-      "          -->Child2Node"
+      "          -->Child2Node",
     }
     local ret = table_eq(model_lines, lines)
     if not ret then
@@ -326,7 +326,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local child2_node = {
       row = 0,
@@ -336,7 +336,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
     local root_node = {
       row = 0,
@@ -346,7 +346,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(child1_node, root_node, nil, {})
@@ -363,7 +363,7 @@ describe("GraphDrawer", function()
       "RootNode<----Child1Node",
       "          |",
       "          |",
-      "          ---Child2Node"
+      "          ---Child2Node",
     }
     local ret = table_eq(lines, model_lines)
     if not ret then
@@ -381,7 +381,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
     local node2 = {
       row = 0,
@@ -391,7 +391,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local node3 = {
       row = 0,
@@ -401,7 +401,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(node1, node2, nil, {})
@@ -434,7 +434,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
     local node2 = {
       row = 0,
@@ -444,7 +444,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
     local node3 = {
       row = 0,
@@ -454,7 +454,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
 
     local edge1 = Edge:new(node2, node1, nil, {})
@@ -479,7 +479,6 @@ describe("GraphDrawer", function()
     assert.is.True(ret)
   end)
 
-
   it("should draw a 3 - level graph with specific node configuration using outcoming edges", function()
     -- 定义根节点
     local root_node = {
@@ -490,7 +489,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 定义第二层的 3 个节点
@@ -502,7 +501,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
 
     local child2_node = {
@@ -513,7 +512,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
 
     local child3_node = {
@@ -524,7 +523,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 4,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 定义第三层的节点
@@ -536,7 +535,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 5,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 连接根节点和第二层的节点
@@ -565,7 +564,7 @@ describe("GraphDrawer", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     local graph_drawer = GraphDrawer:new(bufnr, {
       cb = function() end,
-      cb_ctx = {}
+      cb_ctx = {},
     })
 
     -- 绘制图形
@@ -602,7 +601,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 定义第二层的 3 个节点
@@ -614,7 +613,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
-      usr_data = {}
+      usr_data = {},
     }
 
     local child2_node = {
@@ -625,7 +624,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 3,
-      usr_data = {}
+      usr_data = {},
     }
 
     local child3_node = {
@@ -636,7 +635,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 4,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 定义第三层的节点
@@ -648,7 +647,7 @@ describe("GraphDrawer", function()
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 5,
-      usr_data = {}
+      usr_data = {},
     }
 
     -- 连接第二层节点到根节点（反向连接）
@@ -677,7 +676,7 @@ describe("GraphDrawer", function()
     local bufnr = vim.api.nvim_create_buf(false, true)
     local graph_drawer = GraphDrawer:new(bufnr, {
       cb = function() end,
-      cb_ctx = {}
+      cb_ctx = {},
     })
 
     -- 绘制图形，使用 incoming edge 进行遍历
@@ -688,13 +687,14 @@ describe("GraphDrawer", function()
 
     -- 这里根据 incoming edge 遍历的预期输出定义 model_lines
     local model_lines = {
-      'RootNode<----Child1Node                                 ----GrandChildNode',
-      '          |                                             ||',
-      '          |                                             ||',
-      '          ---ThisIsALongTextNodeWithMoreThanTwentyChars<--',
-      '          |                                             |',
-      '          |                                             |',
-      '          ---Child3Node<---------------------------------', }
+      "RootNode<----Child1Node                                 ----GrandChildNode",
+      "          |                                             ||",
+      "          |                                             ||",
+      "          ---ThisIsALongTextNodeWithMoreThanTwentyChars<--",
+      "          |                                             |",
+      "          |                                             |",
+      "          ---Child3Node<---------------------------------",
+    }
 
     local ret = table_eq(model_lines, lines)
     if not ret then

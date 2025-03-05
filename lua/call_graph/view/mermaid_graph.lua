@@ -15,7 +15,7 @@ function MermaidGraph.export(root_node, output_path)
   local graph = {
     "flowchart RL",
     "classDef startNode fill:#D0F6D0,stroke:#333,stroke-width:2px",
-    "classDef endNode fill:#fcc,stroke:#333,stroke-width:2px"
+    "classDef endNode fill:#fcc,stroke:#333,stroke-width:2px",
   }
 
   local visited_nodes = {}
@@ -48,7 +48,7 @@ function MermaidGraph.export(root_node, output_path)
     -- 添加节点定义
     if not node_names[node_name] then
       node_names[node_name] = true
-      table.insert(graph, string.format("%s[\"%s\"]", node_alias, node_name))
+      table.insert(graph, string.format('%s["%s"]', node_alias, node_name))
     end
 
     -- 判断是否为结束节点
@@ -76,7 +76,7 @@ function MermaidGraph.export(root_node, output_path)
         -- 添加目标节点定义
         if not node_names[target_name] then
           node_names[target_name] = true
-          table.insert(graph, string.format("%s[\"%s\"]", target_alias, target_name))
+          table.insert(graph, string.format('%s["%s"]', target_alias, target_name))
         end
 
         local source_alias, target_alias_for_edge
@@ -109,7 +109,7 @@ function MermaidGraph.export(root_node, output_path)
     -- 添加根节点定义
     if not node_names[root_name] then
       node_names[root_name] = true
-      table.insert(graph, string.format("%s[\"%s\"]", root_alias, root_name))
+      table.insert(graph, string.format('%s["%s"]', root_alias, root_name))
     end
 
     table.insert(graph, string.format("class %s startNode", root_alias))
@@ -127,4 +127,3 @@ function MermaidGraph.export(root_node, output_path)
 end
 
 return MermaidGraph
-

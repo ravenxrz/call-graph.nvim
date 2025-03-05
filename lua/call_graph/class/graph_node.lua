@@ -1,6 +1,6 @@
 --- @class GraphNode
 local GraphNode = {
-  nodeid = 1
+  nodeid = 1,
 }
 GraphNode.__index = GraphNode
 
@@ -25,7 +25,10 @@ end
 
 function GraphNode:to_string()
   local str = {
-    "nodeid:", self.nodeid, "text", self.text
+    "nodeid:",
+    self.nodeid,
+    "text",
+    self.text,
   }
   return table.concat(str, " ")
 end

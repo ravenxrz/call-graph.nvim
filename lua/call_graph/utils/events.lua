@@ -1,7 +1,5 @@
 local M = {
-  bufs = {
-
-  }
+  bufs = {},
 }
 local log = require("call_graph.utils.log")
 
@@ -20,7 +18,7 @@ M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
 
   M.bufs[bufnr].press_cb[keymap] = {
     cb = cb,
-    cb_ctx = cb_ctx
+    cb_ctx = cb_ctx,
   }
 
   local cursor_cb = function()
@@ -39,7 +37,7 @@ M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
     local current_row = pos[1]
     local current_col = pos[2]
     current_row = current_row - 1 -- 行是1-based
-    current_col = current_col     -- 列是0-based
+    current_col = current_col -- 列是0-based
     M.bufs[bufid].press_cb[mapping].cb(current_row, current_col, M.bufs[bufid].press_cb[mapping].cb_ctx)
   end
   vim.keymap.set("n", keymap, cursor_cb, { buffer = bufnr, silent = true, noremap = true })
@@ -55,7 +53,7 @@ M.regist_cursor_hold_cb = function(bufnr, cb, cb_ctx)
   end
   M.bufs[bufnr].cursor_hold = {
     cb = cb,
-    cb_ctx = cb_ctx
+    cb_ctx = cb_ctx,
   }
   local function cursor_hold_cb(bufnr)
     if M.bufs[bufnr] == nil or M.bufs[bufnr].cursor_hold == nil then
@@ -69,7 +67,7 @@ M.regist_cursor_hold_cb = function(bufnr, cb, cb_ctx)
     local current_row = pos[1]
     local current_col = pos[2]
     current_row = current_row - 1 -- 行是1-based
-    current_col = current_col     -- 列是0-based
+    current_col = current_col -- 列是0-based
     M.bufs[bufnr].cursor_hold.cb(current_row, current_col, M.bufs[bufnr].cursor_hold.cb_ctx)
   end
 
@@ -85,7 +83,7 @@ end
 function M.clear_buffer(bufnr)
   if M.bufs[bufnr] then
     log.debug("clear buf id", bufnr, "cb")
-    M.bufs[bufnr] = nil                           -- 移除 bufnr 对应的回调函数
+    M.bufs[bufnr] = nil -- 移除 bufnr 对应的回调函数
     vim.keymap.del("n", "gd", { buffer = bufnr }) -- 移除快捷键
   end
 end
@@ -95,7 +93,5 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, { -- 同时监听 Buf
     M.clear_buffer(event.buf)
   end,
 })
-
-
 
 return M

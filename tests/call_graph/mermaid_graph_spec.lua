@@ -1,5 +1,5 @@
 -- 加载要测试的模块
-local MermaidGraph = require('call_graph.view.mermaid_graph')
+local MermaidGraph = require("call_graph.view.mermaid_graph")
 
 -- 模拟节点和边的结构
 local function create_node(nodeid, text)
@@ -7,14 +7,14 @@ local function create_node(nodeid, text)
     nodeid = nodeid,
     text = text,
     incoming_edges = {},
-    outcoming_edges = {}
+    outcoming_edges = {},
   }
 end
 
 local function create_edge(from_node, to_node)
   return {
     from_node = from_node,
-    to_node = to_node
+    to_node = to_node,
   }
 end
 
@@ -31,8 +31,11 @@ local function check_file_exists(file_path, should_exist)
   if file then
     file:close()
   end
-  assert.is.equal(should_exist, file_exists,
-    string.format("Output file %s exist as expected", should_exist and "should" or "should not"))
+  assert.is.equal(
+    should_exist,
+    file_exists,
+    string.format("Output file %s exist as expected", should_exist and "should" or "should not")
+  )
 end
 
 -- 逐行比较文件内容
@@ -58,7 +61,7 @@ local function compare_file_content(file_path, target_lines)
 end
 
 -- 测试套件
-describe('MermaidGraph', function()
+describe("MermaidGraph", function()
   local output_path
   before_each(function()
     -- 在每个测试用例执行前生成输出文件路径
@@ -74,7 +77,7 @@ describe('MermaidGraph', function()
     end
   end)
 
-  it('should export a simple graph to a file', function()
+  it("should export a simple graph to a file", function()
     -- 创建节点
     local node1 = create_node(1, "Node1")
     local node2 = create_node(2, "Node2")
@@ -107,7 +110,7 @@ describe('MermaidGraph', function()
   end)
 
   -- 测试多个节点和边的复杂图
-  it('should export a complex graph to a file', function()
+  it("should export a complex graph to a file", function()
     local node1 = create_node(1, "Node1")
     local node2 = create_node(2, "Node2")
     local node3 = create_node(3, "Node3")
@@ -141,7 +144,7 @@ describe('MermaidGraph', function()
   end)
 
   -- 测试只有一个节点的图
-  it('should export a single node graph to a file', function()
+  it("should export a single node graph to a file", function()
     local node = create_node(1, "SingleNode")
 
     MermaidGraph.export(node, output_path)
@@ -161,7 +164,7 @@ describe('MermaidGraph', function()
   end)
 
   -- 测试根节点只有入边的情况
-  it('should export a graph with root node having only incoming edges', function()
+  it("should export a graph with root node having only incoming edges", function()
     local node1 = create_node(1, "Node1")
     local node2 = create_node(2, "Node2")
 
@@ -188,9 +191,8 @@ describe('MermaidGraph', function()
   end)
 
   -- 测试输入根节点为 nil 的情况
-  it('should handle nil root node gracefully', function()
+  it("should handle nil root node gracefully", function()
     MermaidGraph.export(nil, output_path)
     check_file_exists(output_path, false)
   end)
 end)
-

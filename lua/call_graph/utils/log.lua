@@ -2,10 +2,10 @@ local log = {}
 
 -- 默认配置
 log.config = {
-  level = "info",                                                                       -- 日志级别：trace, debug, info, warn, error, fatal
-  filepath = vim.fn.stdpath('state') .. "/call_grap_" .. os.date("%Y-%m-%d") .. ".log", -- 日志文件名
-  append = true,                                                                        -- 是否追加到文件
-  caller = true,                                                                        -- 是否显示调用者信息
+  level = "info", -- 日志级别：trace, debug, info, warn, error, fatal
+  filepath = vim.fn.stdpath("state") .. "/call_grap_" .. os.date("%Y-%m-%d") .. ".log", -- 日志文件名
+  append = true, -- 是否追加到文件
+  caller = true, -- 是否显示调用者信息
 }
 
 local config = log.config
@@ -30,7 +30,7 @@ end
 
 -- 获取调用者信息
 local function get_caller_info()
-  local info = debug.getinfo(4, "Sl")                         -- 4 表示调用 log.trace/debug/info/warn/error/fatal 的函数
+  local info = debug.getinfo(4, "Sl") -- 4 表示调用 log.trace/debug/info/warn/error/fatal 的函数
   if info and info.short_src and info.currentline then
     local filename = string.match(info.short_src, "([^/]+)$") -- 提取文件名
     return string.format("%s:%d", filename, info.currentline)
