@@ -26,7 +26,7 @@ Image Description
 
 3. When the cursor moves to a node, all its incoming and outgoing edges will be automatically highlighted.
 
-4. When the cursor moves to an edge, all the edges overlapping with the current cursor (there may be multiple) will be automatically highlighted.
+4. When the cursor moves to an edge, all the edges overlapping with the current cursor (there may be multiple edges) will be automatically highlighted.
 
 5. Each node and edge can be jumped to the corresponding position using the shortcut key `gd`.
 
@@ -41,10 +41,11 @@ As follows, foo1 is called by both foo2 and foo3 at the same time, and the curso
 
 <img src="./pic/cursor_overlap_multi_edge.png" alt="image-20250217213038893" style="zoom:50%;" />
 
-At this time, a selection will be provided when jumping:
+At this time, a selection will be provided when pressing `gd`:
 
 <img src="./pic/multi_edge_goto.png" alt="image-20250217213125179" style="zoom:50%;" />
 
+Besides, this plugin will generate mermaid graph and export it to a file, you can use `CallGraphOpenMermaidGraph` cmd to open it.
 
 ## Installation
 
