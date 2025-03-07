@@ -1,5 +1,6 @@
 local ICallGraphData = require("call_graph.data.incoming_call_graph_data")
 local RCallGraphData = require("call_graph.data.ref_call_graph_data")
+local OutcomingCall = require("call_graph.data.outcoming_call_graph_data")
 local CallGraphView = require("call_graph.view.graph_view")
 local MermaidGraph = require("call_graph.view.mermaid_graph")
 local log = require("call_graph.utils.log")
@@ -11,6 +12,7 @@ Caller.CallType = {
   _NO_CALl = 0,
   INCOMING_CALL = 1,
   REFERENCE_CALL = 2,
+  OUTCOMING_CALL = 3,
 }
 
 Caller.__index = Caller
@@ -21,7 +23,7 @@ local last_buf_id = -1
 local mermaid_path = ".call_graph.mermaid"
 
 --- Creates a new caller instance.
----@param data ICallGraphData|RCallGraphData The call graph data object.
+---@param data ICallGraphData|RCallGraphData|OutcomingCall The call graph data object.
 ---@param view CallGraphView The call graph view object.
 ---@return Caller The new caller instance.
 local function create_caller(data, view)
@@ -43,6 +45,12 @@ function Caller.new_ref_call(hl_delay_ms, toogle_hl, max_depth)
   return create_caller(data, view)
 end
 
+function Caller.new_outcoming_call(hl_delay_ms, toogle_hl)
+  local data = OutcomingCall:new()
+  local view = CallGraphView:new(hl_delay_ms, toogle_hl)
+  return create_caller(data, view)
+end
+
 function Caller.open_mermaid_file()
   vim.cmd(":e " .. mermaid_path)
 end
@@ -58,27 +66,26 @@ end
 ---@param call_type CallType, default is INCOMING_CALL
 function Caller.generate_call_graph(opts, call_type)
   call_type = call_type or Caller.CallType.INCOMING_CALL
-
   local caller = Caller.get_caller(opts, call_type)
-
   if not caller then
     vim.notify(string.format("unsupported call type: %s", call_type), vim.log.levels.ERROR)
     return
   end
 
   log.debug("caller info:", vim.inspect(caller))
-
   local function on_graph_generated(root_node)
     last_buf_id = caller.view:draw(root_node, opts.reuse_buf)
-
     if opts.export_mermaid_graph then
       MermaidGraph.export(root_node, mermaid_path)
     end
-
     print("[CallGraph] graph generated")
   end
 
-  caller.data:generate_call_graph(on_graph_generated, opts.reuse_buf)
+  if call_type == Caller.CallType.OUTCOMING_CALL then
+    caller.data:generate_call_graph(on_graph_generated, false) -- TODO(zhangxingrui): to couple with the udnerlying logic
+  else
+    caller.data:generate_call_graph(on_graph_generated, opts.reuse_buf)
+  end
 end
 
 --- Gets or creates a caller instance based on the given options and call type.
@@ -131,6 +138,8 @@ function Caller.create_new_caller(opts, call_type)
   elseif call_type == Caller.CallType.REFERENCE_CALL then
     local max_depth = opts.ref_call_max_depth
     return Caller.new_ref_call(hl_delay_ms, auto_toggle_hl, max_depth)
+  elseif call_type == Caller.CallType.OUTCOMING_CALL then
+    return Caller.new_outcoming_call(hl_delay_ms, auto_toggle_hl)
   else
     return nil
   end

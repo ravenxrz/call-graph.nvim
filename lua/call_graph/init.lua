@@ -23,6 +23,7 @@ local function create_user_cmd()
     end
     Caller.generate_call_graph(M.opts, Caller.CallType.INCOMING_CALL)
   end, { desc = "Generate call graph using incoming call", nargs = "?" })
+
   vim.api.nvim_create_user_command("CallGraphR", function(args)
     local opts = vim.deepcopy(M.opts)
     if args ~= nil and args.args ~= "" then
@@ -33,6 +34,11 @@ local function create_user_cmd()
     Caller.generate_call_graph(opts, Caller.CallType.REFERENCE_CALL)
   end, { desc = "Generate call graph using reference call", nargs = "?" })
 
+  vim.api.nvim_create_user_command("CallGraphO", function()
+    local opts = vim.deepcopy(M.opts)
+    Caller.generate_call_graph(opts, Caller.CallType.OUTCOMING_CALL)
+  end, { desc = "Generate call graph using outcoming call" })
+
   vim.api.nvim_create_user_command("CallGraphToggleReuseBuf", function()
     M.opts.reuse_buf = not M.opts.reuse_buf
     local switch = "on"
@@ -41,16 +47,6 @@ local function create_user_cmd()
     end
     vim.notify(string.format("Call graph reuse buf is %s", switch), vim.log.levels.INFO)
   end, { desc = "Toggle reuse buf of call graph" })
-
-  -- TODO(zhangxingrui): support auto highlighting switch
-  -- vim.api.nvim_create_user_command("CallGraphToggleAutoHighlight", function()
-  --   M.opts.auto_toggle_hl = not M.opts.auto_toggle_hl
-  --   local switch = "on"
-  --   if not M.opts.auto_toggle_hl then
-  --     switch = "off"
-  --   end
-  --   vim.notify(string.format("Call graph auto hl is %s", switch), vim.log.levels.INFO)
-  -- end, { desc = "Toggle highlighting of call graph" })
 
   vim.api.nvim_create_user_command("CallGraphLog", function()
     vim.cmd(":e " .. log.config.filepath)
