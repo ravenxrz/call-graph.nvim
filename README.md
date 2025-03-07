@@ -54,6 +54,9 @@ Installing with lazy.nvim:
 ```lua
 {
     "ravenxrz/call-graph.nvim",
+     dependencies = {
+       "nvim-treesitter/nvim-treesitter",
+     },
     opts = {
         log_level = "info",
         reuse_buf = true,  -- Whether to reuse the same buffer for call graphs generated multiple times
@@ -70,6 +73,7 @@ Installing with lazy.nvim:
 
 - **CallGraphI**: Generate a call graph using incoming calls (fast, but not comprehensive)
 - **CallGraphR**: Generate a call graph using references + treesitter (slow, and many files will be opened, but the call graph is more comprehensive. Currently, it only supports C++)
+- **CallGraphO**: Generate a outcomimg call graph using treesitter (only supports C++)
 - **CallGraphOpenMermaidGraph**: Open the Mermaid graph
 - **CallGraphLog**: Open the log of the call graph
 

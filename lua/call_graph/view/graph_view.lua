@@ -412,14 +412,16 @@ end
 local function collect_nodes_and_edges(root_node)
   local nodes = {}
   local edges = {}
-  local visited_nodes = {}
+  local visited_nodes_incoming = {}
+  local visited_nodes_outcoming = {}
   local visited_edges = {}
+  local added_nodes = {}
 
   -- 辅助函数：添加节点到结果集
   local function add_node(node)
-    if not visited_nodes[node.nodeid] then
+    if not added_nodes[node.nodeid] then
       table.insert(nodes, node)
-      visited_nodes[node.nodeid] = true
+      added_nodes[node.nodeid] = true
     end
   end
 
@@ -433,9 +435,10 @@ local function collect_nodes_and_edges(root_node)
 
   -- 按照 incoming_edges 遍历
   local function traverse_incoming(node)
-    if visited_nodes[node.nodeid] then
+    if visited_nodes_incoming[node.nodeid] then
       return
     end
+    visited_nodes_incoming[node.nodeid] = true
     add_node(node)
 
     for _, edge in ipairs(node.incoming_edges or {}) do
@@ -446,12 +449,13 @@ local function collect_nodes_and_edges(root_node)
 
   -- 按照 outcoming_edges 遍历
   local function traverse_outcoming(node)
-    if visited_nodes[node.nodeid] then
+    if visited_nodes_outcoming[node.nodeid] then
       return
     end
+    visited_nodes_outcoming[node.nodeid] = true
     add_node(node)
 
-    for _, edge in ipairs(node.outcoming_edges or {}) do
+    for _, edge in pairs(node.outcoming_edges or {}) do
       add_edge(edge)
       traverse_outcoming(edge.to_node)
     end
@@ -492,7 +496,12 @@ function CallGraphView:draw(root_node, reuse_buf)
     self.buf.bufid = vim.api.nvim_create_buf(true, true)
   end
 
-  vim.api.nvim_buf_set_name(self.buf.bufid, root_node.text .. "-" .. tonumber(self.view_id))
+  local target_buf_name = root_node.text .. "-" .. tonumber(self.view_id)
+  local full_path = vim.api.nvim_buf_get_name(self.buf.bufid)
+  local file_name = vim.fn.fnamemodify(full_path, ":t")
+  if file_name ~= target_buf_name then
+    vim.api.nvim_buf_set_name(self.buf.bufid, target_buf_name)
+  end
   setup_buf(self, nodes, edges)
 
   log.info("generate graph of", root_node.text)

@@ -17,6 +17,9 @@ lazy.nvim
 ```lua
   {
     "ravenxrz/call-graph.nvim",
+     dependencies = {
+       "nvim-treesitter/nvim-treesitter",
+     },
     opts = {
       log_level = "info",
       reuse_buf = true,  -- 多次生成的call graph是否复用同一个buf
@@ -33,6 +36,7 @@ lazy.nvim
 
 - CallGraphI: 使用incoming call生成call graph(快，但是不一定全)
 - CallGraphR: 使用references + treesitter生成call graph(慢，且会打开很多文件，但是call graph更全, 当前仅支持c++)
+- CallGraphO: 使用treesitter生成outcoming call graph(当前仅支持c++)
 - CallGraphLog:  打开call graph的log
 - CallGraphOpenMermaidGraph: 打开mermaid graph
 
