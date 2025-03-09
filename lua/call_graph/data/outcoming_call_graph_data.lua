@@ -16,57 +16,14 @@ local language_queries = {
   cpp = {
     function_call = [[
     [
-        ; 基本的函数调用
         (call_expression
           function: (identifier) @func_name)
 
-        ; 带有命名空间限定符的函数调用
         (call_expression
-          function: (qualified_identifier
-            scope: (namespace_identifier)
-            name: (identifier) @func_name))
+          function: (qualified_identifier) @func_name)
 
-        ; 成员函数调用，参数为另一个函数调用
         (call_expression
-          function: (field_expression
-            argument: (call_expression
-              function: (qualified_identifier
-                scope: (namespace_identifier)
-                name: (identifier))
-              arguments: (argument_list))
-            field: (field_identifier) @func_name))
-
-        ; 嵌套多层的成员函数调用
-        (call_expression
-          function: (field_expression
-            argument: (call_expression
-              function: (field_expression
-                argument: (call_expression
-                  function: (qualified_identifier
-                    scope: (namespace_identifier)
-                    name: (identifier))
-                  arguments: (argument_list))
-                field: (field_identifier))
-              arguments: (argument_list))
-            field: (field_identifier) @func_name))
-
-        ; 带有模板类型的命名空间限定函数调用
-        (call_expression
-          function: (qualified_identifier
-            scope: (namespace_identifier)
-            name: (qualified_identifier
-              scope: (template_type
-                name: (type_identifier)
-                arguments: (template_argument_list
-                  (type_descriptor
-                    type: (type_identifier))))
-              name: (identifier) @func_name)))
-
-        ; 简单的成员函数调用，参数为标识符
-        (call_expression
-          function: (field_expression
-            argument: (identifier)
-            field: (field_identifier) @func_name))
+          function: (field_expression) @func_name)
     ]
         ]],
   },
