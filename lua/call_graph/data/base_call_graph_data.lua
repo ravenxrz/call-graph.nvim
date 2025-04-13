@@ -10,7 +10,7 @@ BaseCallGraphData.__index = BaseCallGraphData
 function BaseCallGraphData:new(max_depth)
   local o = setmetatable({}, self)
   o.root_node = nil --- @type FuncNode
-  o.nodes = {} --@type { [node_key: string] : GraphNode }, record the generated node to dedup
+  o.nodes = {}      --@type { [node_key: string] : GraphNode }, record the generated node to dedup
   o.max_depth = max_depth
 
   o._pending_request = 0
@@ -106,8 +106,13 @@ function BaseCallGraphData:generate_call_graph_from_node(gnode, depth)
 end
 
 function BaseCallGraphData:generate_call_graph(gen_graph_done_cb, reuse_data)
+  local client = self:find_buf_client(self.request_method)
+  if client == nil then
+    vim.notify("No LSP client found or current lsp does not support this operation", vim.log.levels.WARN)
+    return
+  end
+  local pos_params = vim.lsp.util.make_position_params(0, client.offset_encoding)
   self.gen_graph_done_cb = gen_graph_done_cb
-  local pos_params = vim.lsp.util.make_position_params()
   local func_name = vim.fn.expand("<cword>")
   local root_text = self:make_node_key(pos_params.textDocument.uri, pos_params.position.line, func_name)
   local from_node
