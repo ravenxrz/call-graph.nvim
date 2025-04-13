@@ -112,7 +112,6 @@ local function get_ref_func_symbol_by_lsp(uri, range, callback)
   end
 end
 
-
 local function get_ref_func_symbol_by_ts(uri, range)
   local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
   local parsers = require("nvim-treesitter.parsers")

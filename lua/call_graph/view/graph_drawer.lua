@@ -13,7 +13,7 @@ local log = require("call_graph.utils.log")
 function GraphDrawer:new(bufnr, draw_edge_cb)
   local g = {
     bufnr = bufnr,
-    row_spacing = 3,
+    row_spacing = 2,
     col_spacing = 5,
     draw_edge_cb = draw_edge_cb, --- @type table {cb = func, cb_ctx: any}
     modifiable = true,
