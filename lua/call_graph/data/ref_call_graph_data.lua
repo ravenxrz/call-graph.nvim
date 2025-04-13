@@ -22,6 +22,82 @@ function ReferenceCallGraphData:get_request_params(fnode)
   }
 end
 
+local function get_ref_func_symbol_by_lsp(uri, range)
+  -- 将 file:// 协议的 URI 转换为本地文件路径
+  local file_path = vim.uri_to_fname(uri)
+  local bufnr = vim.uri_to_bufnr(uri)
+
+  -- 获取当前缓冲区的 LSP 客户端
+  local clients = vim.lsp.get_active_clients({ bufnr = bufnr })
+  if #clients == 0 then
+    log.warn("No active LSP clients for buffer", "uri", uri)
+    return nil
+  end
+
+  -- 选择第一个 LSP 客户端
+  local client = clients[1]
+
+  -- 发送 document_symbol 请求
+  -- TODO(zhangxingrui): use async request
+  local symbols = client.request_sync("textDocument/documentSymbol", { textDocument = { uri = uri } }, 1000, bufnr)
+  if not symbols or symbols.error then
+    log.warn("Failed to get document symbols", "uri", uri, "error", symbols and symbols.error)
+    return nil
+  end
+
+  symbols = symbols.result
+
+  -- 递归查找包含 range 的函数符号
+  local function find_symbol_in_tree(symbols_tree)
+    local kind = vim.lsp.protocol.SymbolKind
+    local expect_kind = {
+      kind.Constructor,
+      kind.Function,
+      kind.Method,
+    }
+    for _, symbol in ipairs(symbols_tree) do
+      if vim.tbl_contains(expect_kind, symbol.kind) then
+        local symbol_range = symbol.location and symbol.location.range or symbol.range
+        local symbol_start_row = symbol_range.start.line
+        local symbol_end_row = symbol_range["end"].line
+
+        -- 判断传入的 range 是否在函数定义范围内
+        local range_start_row = range.start.line
+        local range_end_row = range["end"].line
+        local is_in_range = (range_start_row >= symbol_start_row and range_end_row < symbol_end_row)
+
+        if is_in_range then
+          log.info("find the calling symbol", symbol.name)
+          return {
+            name = symbol.name,
+            range = {
+              start = {
+                line = symbol_range.start.line,
+                character = symbol_range.start.character,
+              },
+              ["end"] = {
+                line = symbol_range["end"].line,
+                character = symbol_range["end"].character,
+              },
+            },
+          }
+        end
+      end
+
+      -- 递归查找子符号
+      if symbol.children then
+        local result = find_symbol_in_tree(symbol.children)
+        if result then
+          return result
+        end
+      end
+    end
+    return nil
+  end
+  return find_symbol_in_tree(symbols)
+end
+
+
 local function get_ref_func_symbol(uri, range)
   local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
   local parsers = require("nvim-treesitter.parsers")
@@ -122,7 +198,7 @@ local function get_ref_func_symbol(uri, range)
       local name = vim.treesitter.get_node_text(node, bufnr)
       local name_start_row, name_start_col = node:start()
       local name_end_row, name_end_col = node:end_()
-      log.debug(vim.inspect(range))
+      log.debug("passed in range", vim.inspect(range))
 
       if current_function_def_node then
         local def_start_row, _ = current_function_def_node:start()
@@ -184,7 +260,7 @@ function ReferenceCallGraphData:call_handler(err, result, _, my_ctx)
     local ref_start = ref.range.start
 
     -- 获取文件的函数符号信息
-    local symbol = get_ref_func_symbol(uri, ref.range)
+    local symbol = get_ref_func_symbol_by_lsp(uri, ref.range)
     if symbol then
       log.info("find symbols by ts", vim.inspect(symbol))
       local symbol_range = symbol.range
