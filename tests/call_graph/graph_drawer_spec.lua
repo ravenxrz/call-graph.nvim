@@ -1,5 +1,7 @@
 local GraphDrawer = require("call_graph.view.graph_drawer")
+local CallGraphView = require("call_graph.view.graph_view")
 local Edge = require("call_graph.class.edge")
+local Caller = require("call_graph.caller")
 
 local function table_eq(tbl1, tbl2)
   if #tbl1 ~= #tbl2 then
@@ -1167,5 +1169,219 @@ describe("GraphDrawer", function()
       "A---->B"
     }
     assert.same(expected_lines, lines)
+  end)
+
+  it("should preserve node usr_data in subgraph for node info and navigation", function()
+    -- 构造原始节点和边
+    local node1 = {
+      row = 0,
+      col = 0,
+      text = "test.cc:10",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {
+        pos_params = {
+          textDocument = { uri = "file:///test.cc" },
+          position = { line = 10, character = 0 }
+        }
+      },
+      pos_params = {
+        textDocument = { uri = "file:///test.cc" },
+        position = { line = 10, character = 0 }
+      }
+    }
+    local node2 = {
+      row = 0,
+      col = 0,
+      text = "test.cc:20",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {
+        pos_params = {
+          textDocument = { uri = "file:///test.cc" },
+          position = { line = 20, character = 0 }
+        }
+      },
+      pos_params = {
+        textDocument = { uri = "file:///test.cc" },
+        position = { line = 20, character = 0 }
+      }
+    }
+    local edge = Edge:new(node1, node2, {
+      textDocument = { uri = "file:///test.cc" },
+      position = { line = 15, character = 0 }
+    }, {
+      { start_row = 0, start_col = 0, end_row = 1, end_col = 0 }
+    })
+    table.insert(node1.outcoming_edges, edge)
+    table.insert(node2.incoming_edges, edge)
+
+    -- 模拟标记模式
+    local marked_node_ids = {1, 2}
+    local nodes = { [1]=node1, [2]=node2 }
+    local edges = { edge }
+    
+    -- 生成子图
+    local caller = require("call_graph.caller")
+    local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
+
+    -- 验证子图数据结构
+    assert.is_not_nil(subgraph)
+    assert.is_not_nil(subgraph.nodes_map)
+    assert.is_not_nil(subgraph.nodes_list)
+    assert.is_not_nil(subgraph.edges)
+
+    -- 验证节点 usr_data 被正确复制
+    local sub_node1 = subgraph.nodes_map[1]
+    local sub_node2 = subgraph.nodes_map[2]
+    assert.is_not_nil(sub_node1.usr_data)
+    assert.is_not_nil(sub_node2.usr_data)
+    assert.are.same(node1.usr_data.pos_params, sub_node1.usr_data.pos_params)
+    assert.are.same(node2.usr_data.pos_params, sub_node2.usr_data.pos_params)
+
+    -- 验证节点 pos_params 被正确复制
+    assert.is_not_nil(sub_node1.pos_params)
+    assert.is_not_nil(sub_node2.pos_params)
+    assert.are.same(node1.pos_params, sub_node1.pos_params)
+    assert.are.same(node2.pos_params, sub_node2.pos_params)
+
+    -- 验证边的 pos_params 和 sub_edges 被正确复制
+    local sub_edge = subgraph.edges[1]
+    assert.is_not_nil(sub_edge.pos_params)
+    assert.is_not_nil(sub_edge.sub_edges)
+    assert.are.same(edge.pos_params, sub_edge.pos_params)
+    assert.are.same(edge.sub_edges, sub_edge.sub_edges)
+
+    -- 验证渲染结果
+    graph_drawer.nodes = subgraph.nodes_map
+    graph_drawer:draw(sub_node1, false)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    assert.same({ "test.cc:10---->test.cc:20" }, lines)
+  end)
+
+  it("should support K and gd in subgraph", function()
+    -- 构造原始节点和边
+    local node1 = {
+      row = 0,
+      col = 0,
+      text = "Node1",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {
+        file = "/path/to/file1.lua",
+        line = 10,
+        col = 5,
+        text = "function node1()"
+      },
+      pos_params = {
+        row = 0,
+        col = 0
+      }
+    }
+    local node2 = {
+      row = 0,
+      col = 0,
+      text = "Node2",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {
+        file = "/path/to/file2.lua",
+        line = 20,
+        col = 8,
+        text = "function node2()"
+      },
+      pos_params = {
+        row = 2,
+        col = 0
+      }
+    }
+    local node3 = {
+      row = 0,
+      col = 0,
+      text = "Node3",
+      level = 3,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 3,
+      usr_data = {
+        file = "/path/to/file3.lua",
+        line = 30,
+        col = 12,
+        text = "function node3()"
+      },
+      pos_params = {
+        row = 4,
+        col = 0
+      }
+    }
+    local edge1 = Edge:new(node1, node2)
+    edge1.pos_params = { row = 1, col = 0 }
+    table.insert(node1.outcoming_edges, edge1)
+    table.insert(node2.incoming_edges, edge1)
+
+    local edge2 = Edge:new(node2, node3)
+    edge2.pos_params = { row = 3, col = 0 }
+    table.insert(node2.outcoming_edges, edge2)
+    table.insert(node3.incoming_edges, edge2)
+
+    local nodes = { [1]=node1, [2]=node2, [3]=node3 }
+    local edges = { edge1, edge2 }
+
+    -- 创建视图并绘制完整图
+    local view = CallGraphView:new()
+    view:draw(node1, nodes, edges)
+
+    -- 模拟标记节点
+    local marked_node_ids = {1, 2}  -- 标记 Node1 和 Node2
+
+    -- 生成子图
+    local subgraph = Caller.generate_subgraph(marked_node_ids, nodes, edges)
+    assert.is_not_nil(subgraph, "Subgraph should be generated")
+    assert.is_not_nil(subgraph.nodes_map, "Subgraph should have nodes_map")
+    assert.is_not_nil(subgraph.edges, "Subgraph should have edges")
+
+    -- 创建新视图并绘制子图
+    local subgraph_view = CallGraphView:new()
+    subgraph_view:draw(subgraph.nodes_list[1], subgraph.nodes_map, subgraph.edges)
+
+    -- 验证子图中的节点数据
+    local subgraph_node1 = subgraph.nodes_map[1]
+    assert.is_not_nil(subgraph_node1, "Node1 should exist in subgraph")
+    assert.is_not_nil(subgraph_node1.usr_data, "Node1 should have usr_data")
+    assert.equals("/path/to/file1.lua", subgraph_node1.usr_data.file)
+    assert.equals(10, subgraph_node1.usr_data.line)
+    assert.equals(5, subgraph_node1.usr_data.col)
+    assert.equals("function node1()", subgraph_node1.usr_data.text)
+
+    local subgraph_node2 = subgraph.nodes_map[2]
+    assert.is_not_nil(subgraph_node2, "Node2 should exist in subgraph")
+    assert.is_not_nil(subgraph_node2.usr_data, "Node2 should have usr_data")
+    assert.equals("/path/to/file2.lua", subgraph_node2.usr_data.file)
+    assert.equals(20, subgraph_node2.usr_data.line)
+    assert.equals(8, subgraph_node2.usr_data.col)
+    assert.equals("function node2()", subgraph_node2.usr_data.text)
+
+    -- 模拟在子图中使用 K 键查看节点信息
+    subgraph_view.nodes_cache = subgraph.nodes_map
+    vim.api.nvim_win_set_cursor(0, {1, 0}) -- 假设 Node1 在第1行
+    local node_at_cursor = subgraph_view:get_node_at_cursor()
+    assert.is_not_nil(node_at_cursor, "Should be able to get node at cursor")
+    assert.is_not_nil(node_at_cursor.usr_data, "Node should have usr_data for K key")
+
+    -- 模拟在子图中使用 gd 键跳转
+    local edge = subgraph.edges[1]
+    assert.is_not_nil(edge, "Should have edge in subgraph")
+    assert.is_not_nil(edge.from_node, "Edge should have from_node")
+    assert.is_not_nil(edge.to_node, "Edge should have to_node")
+    assert.is_not_nil(edge.from_node.usr_data, "from_node should have usr_data for gd")
+    assert.is_not_nil(edge.to_node.usr_data, "to_node should have usr_data for gd")
   end)
 end)

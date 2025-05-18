@@ -445,11 +445,10 @@ function Caller.end_mark_mode_and_generate_subgraph()
 
   -- 创建新视图并绘制子图
   local new_view = CallGraphView:new()
-  -- 设置 nodes_map
-  new_view.nodes = subgraph.nodes_map
   -- 使用 nodes_list 中的第一个节点作为根节点
   local root_node = subgraph.nodes_list[1]
-  new_view:draw(root_node, false)
+  -- 绘制子图，传入所有必要的参数
+  new_view:draw(root_node, subgraph.nodes_map, subgraph.edges)
 
   -- 更新全局视图
   g_caller.view = new_view
@@ -486,6 +485,14 @@ function generate_subgraph(marked_node_ids, nodes, edges)
       -- 重置边的引用
       node_copy.incoming_edges = {}
       node_copy.outcoming_edges = {}
+      -- 确保 usr_data 被正确复制
+      if nodes[node_id].usr_data then
+        node_copy.usr_data = vim.deepcopy(nodes[node_id].usr_data)
+      end
+      -- 确保 pos_params 被正确复制
+      if nodes[node_id].pos_params then
+        node_copy.pos_params = vim.deepcopy(nodes[node_id].pos_params)
+      end
       subgraph_nodes_map[node_id] = node_copy
       table.insert(subgraph_nodes, node_copy)
     end
@@ -498,7 +505,10 @@ function generate_subgraph(marked_node_ids, nodes, edges)
     if subgraph_nodes_map[from_id] and subgraph_nodes_map[to_id] then
       -- 重新构建新边，from/to 指向新_nodes
       local Edge = require("call_graph.class.edge")
-      local new_edge = Edge:new(subgraph_nodes_map[from_id], subgraph_nodes_map[to_id], nil, {})
+      -- 深度复制 pos_params 和 sub_edges
+      local pos_params = edge.pos_params and vim.deepcopy(edge.pos_params) or nil
+      local sub_edges = edge.sub_edges and vim.deepcopy(edge.sub_edges) or {}
+      local new_edge = Edge:new(subgraph_nodes_map[from_id], subgraph_nodes_map[to_id], pos_params, sub_edges)
       table.insert(subgraph_nodes_map[from_id].outcoming_edges, new_edge)
       table.insert(subgraph_nodes_map[to_id].incoming_edges, new_edge)
       table.insert(subgraph_edges, new_edge)
