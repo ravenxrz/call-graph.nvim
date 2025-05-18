@@ -19,8 +19,83 @@ Caller.__index = Caller
 
 local g_caller = nil
 local last_call_type = Caller.CallType._NO_CALl
-local last_buf_id = -1
 local mermaid_path = ".call_graph.mermaid"
+
+-- Graph history management
+local graph_history = {}
+local max_history_size = 20
+
+--- Add a graph to history
+---@param buf_id number The buffer ID of the graph
+---@param root_node_name string The name of the root node
+---@param call_type CallType The type of call graph
+local function add_to_history(buf_id, root_node_name, call_type)
+  table.insert(graph_history, 1, {
+    buf_id = buf_id,
+    root_node_name = root_node_name,
+    call_type = call_type,
+    timestamp = os.time()
+  })
+  
+  -- Trim history if it exceeds max size
+  if #graph_history > max_history_size then
+    -- Remove the oldest entry (last in the array)
+    table.remove(graph_history, #graph_history)
+  end
+end
+
+--- Open the latest graph
+function Caller.open_latest_graph()
+  if #graph_history == 0 then
+    vim.notify("[CallGraph] No graph history available", vim.log.levels.WARN)
+    return
+  end
+  
+  local latest = graph_history[1]
+  if vim.api.nvim_buf_is_valid(latest.buf_id) then
+    vim.cmd("buffer " .. latest.buf_id)
+  else
+    vim.notify("[CallGraph] Latest graph buffer is no longer valid", vim.log.levels.ERROR)
+  end
+end
+
+--- Show graph history and let user select
+function Caller.show_graph_history()
+  if #graph_history == 0 then
+    vim.notify("[CallGraph] No graph history available", vim.log.levels.WARN)
+    return
+  end
+
+  local items = {}
+  for i, entry in ipairs(graph_history) do
+    local call_type_str = "Unknown"
+    if entry.call_type == Caller.CallType.INCOMING_CALL then
+      call_type_str = "Incoming"
+    elseif entry.call_type == Caller.CallType.REFERENCE_CALL then
+      call_type_str = "Reference"
+    elseif entry.call_type == Caller.CallType.OUTCOMING_CALL then
+      call_type_str = "Outcoming"
+    end
+
+    local time_str = os.date("%Y-%m-%d %H:%M:%S", entry.timestamp)
+    table.insert(items, string.format("%d. [%s] %s (%s)", 
+      i, call_type_str, entry.root_node_name, time_str))
+  end
+
+  vim.ui.select(items, {
+    prompt = "Select a graph to open:",
+    format_item = function(item) return item end,
+  }, function(choice, idx)
+    if idx then
+      local entry = graph_history[idx]
+      if vim.api.nvim_buf_is_valid(entry.buf_id) then
+        vim.cmd("buffer " .. entry.buf_id)
+      else
+        vim.notify("[CallGraph] Selected graph buffer is no longer valid", vim.log.levels.ERROR)
+      end
+    end
+  end)
+end
 
 --- Creates a new caller instance.
 ---@param data ICallGraphData|RCallGraphData|OutcomingCall The call graph data object.
@@ -59,12 +134,11 @@ end
 ---@param opts table
 ---             - hl_delay_ms number
 ---             - auto_toggle_hl boolean
----             - reuse_buf boolean
 ---             - in_call_max_depth number
 ---             - ref_call_max_depth number
 ---             - export_mermaid_graph boolean
 ---@param call_type CallType, default is INCOMING_CALL
-function Caller.generate_call_graph(opts, call_type)
+function Caller.generate_call_graph(opts, call_type, on_generated_callback)
   call_type = call_type or Caller.CallType.INCOMING_CALL
   local caller = Caller.get_caller(opts, call_type)
   if not caller then
@@ -73,51 +147,43 @@ function Caller.generate_call_graph(opts, call_type)
   end
 
   log.debug("caller info:", vim.inspect(caller))
-  local function on_graph_generated(root_node)
-    last_buf_id = caller.view:draw(root_node, opts.reuse_buf)
+
+  local function on_graph_generated(root_node, nodes, edges)
+    caller.view:draw(root_node, nodes, edges)
+    local buf_id = caller.view.buf.bufid
+    vim.notify("[CallGraph] graph generated", vim.log.levels.INFO)
+    
+    -- Add to history
+
+    local root_node_name = root_node and root_node.text or "UnknownRoot"
+    add_to_history(buf_id, root_node_name, call_type)
+    
+    -- Update mermaid file if export is enabled
     if opts.export_mermaid_graph then
       MermaidGraph.export(root_node, mermaid_path)
     end
-    print("[CallGraph] graph generated")
+    
+    if on_generated_callback then
+      on_generated_callback(buf_id, root_node_name)
+    end
   end
-
-  if call_type == Caller.CallType.OUTCOMING_CALL then
-    caller.data:generate_call_graph(on_graph_generated, false) -- TODO(zhangxingrui): to couple with the udnerlying logic
-  else
-    caller.data:generate_call_graph(on_graph_generated, opts.reuse_buf)
-  end
+  caller.data:generate_call_graph(on_graph_generated)
 end
 
 --- Gets or creates a caller instance based on the given options and call type.
 ---@param opts table
 ---             - hl_delay_ms number
 ---             - auto_toggle_hl boolean
----             - reuse_buf boolean
 ---             - in_call_max_depth number
 ---             - ref_call_max_depth number
 ---@param call_type CallType
 ---@return Caller
 function Caller.get_caller(opts, call_type)
-  if opts.reuse_buf and g_caller and last_call_type == call_type then
-    return g_caller
-  else
-    local view = nil
-    if opts.reuse_buf and g_caller then
-      view = g_caller.view
-      if last_buf_id ~= -1 then
-        view:reuse_buf(last_buf_id)
-      end
-    end
-    -- Create a new caller
-    local caller = Caller.create_new_caller(opts, call_type)
-    if view then
-      caller.view = view -- restore view state
-    end
-
-    g_caller = caller
-    last_call_type = call_type
-    return caller
-  end
+  -- Create a new caller
+  local caller = Caller.create_new_caller(opts, call_type)
+  g_caller = caller
+  last_call_type = call_type
+  return caller
 end
 
 --- Creates a new caller instance based on the call type.

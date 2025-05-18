@@ -193,7 +193,7 @@ function OutcomingCall:find_function_calls(func_node, lang)
 end
 
 function OutcomingCall:generate_call_graph(gen_graph_done_cb, reuse_data)
-  assert(reuse_data == false, "OutcomingCall:generate_call_graph only support reuse_data=false")
+  assert(reuse_data == false or reuse_data == nil, "OutcomingCall:generate_call_graph only support reuse_data=false")
   self.gen_graph_done_cb = gen_graph_done_cb
   self:clear_data()
 

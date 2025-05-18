@@ -1,13 +1,13 @@
 -- plugin.lua
 local M = {
   opts = {
-    reuse_buf = false,
     log_level = "info",
     hl_delay_ms = 200,
     auto_toggle_hl = true,
     in_call_max_depth = 4,
     ref_call_max_depth = 4,
     export_mermaid_graph = false,
+    max_history_size = 20, -- Maximum number of graphs to keep in history
   },
 }
 local Caller = require("call_graph.caller")
@@ -39,15 +39,6 @@ local function create_user_cmd()
     Caller.generate_call_graph(opts, Caller.CallType.OUTCOMING_CALL)
   end, { desc = "Generate call graph using outcoming call" })
 
-  vim.api.nvim_create_user_command("CallGraphToggleReuseBuf", function()
-    M.opts.reuse_buf = not M.opts.reuse_buf
-    local switch = "on"
-    if not M.opts.reuse_buf then
-      switch = "off"
-    end
-    vim.notify(string.format("Call graph reuse buf is %s", switch), vim.log.levels.INFO)
-  end, { desc = "Toggle reuse buf of call graph" })
-
   vim.api.nvim_create_user_command("CallGraphLog", function()
     vim.cmd(":e " .. log.config.filepath)
   end, { desc = "Open call graph log file" })
@@ -55,14 +46,18 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command("CallGraphOpenMermaidGraph", function()
     Caller.open_mermaid_file()
   end, { desc = "Open call graph mermaid file" })
+
+  vim.api.nvim_create_user_command("CallGraphOpenLastestGraph", function()
+    Caller.open_latest_graph()
+  end, { desc = "Open the most recently generated call graph" })
+
+  vim.api.nvim_create_user_command("CallGraphHistoryGraph", function()
+    Caller.show_graph_history()
+  end, { desc = "Show and select from call graph history" })
 end
 
 local function setup_hl()
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
-end
-
-function M.is_reuse_buf()
-  return M.opts.reuse_buf
 end
 
 function M.setup(opts)

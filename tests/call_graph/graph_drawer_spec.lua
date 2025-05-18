@@ -307,7 +307,6 @@ describe("GraphDrawer", function()
     local model_lines = {
       "RootNode---->Child1Node",
       "          |",
-      "          |",
       "          -->Child2Node",
     }
     local ret = table_eq(model_lines, lines)
@@ -361,7 +360,6 @@ describe("GraphDrawer", function()
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local model_lines = {
       "RootNode<----Child1Node",
-      "          |",
       "          |",
       "          ---Child2Node",
     }
@@ -578,9 +576,7 @@ describe("GraphDrawer", function()
     local model_lines = {
       "RootNode---->Child1Node                                 --->GrandChildNode",
       "          |                                             ||",
-      "          |                                             ||",
       "          -->ThisIsALongTextNodeWithMoreThanTwentyChars---",
-      "          |                                             |",
       "          |                                             |",
       "          -->Child3Node----------------------------------",
     }
@@ -689,9 +685,7 @@ describe("GraphDrawer", function()
     local model_lines = {
       "RootNode<----Child1Node                                 ----GrandChildNode",
       "          |                                             ||",
-      "          |                                             ||",
       "          ---ThisIsALongTextNodeWithMoreThanTwentyChars<--",
-      "          |                                             |",
       "          |                                             |",
       "          ---Child3Node<---------------------------------",
     }
