@@ -54,10 +54,19 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command("CallGraphHistoryGraph", function()
     Caller.show_graph_history()
   end, { desc = "Show and select from call graph history" })
+
+  vim.api.nvim_create_user_command("CallGraphMarkNode", function()
+    Caller.mark_node_under_cursor()
+  end, { desc = "Mark/unmark the node under cursor (automatically starts mark mode if not active)" })
+
+  vim.api.nvim_create_user_command("CallGraphMarkEnd", function()
+    Caller.end_mark_mode_and_generate_subgraph()
+  end, { desc = "End marking and generate subgraph from marked nodes" })
 end
 
 local function setup_hl()
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
+  vim.api.nvim_set_hl(0, "CallGraphMarkedNode", { link = "Visual" })
 end
 
 function M.setup(opts)

@@ -23,7 +23,7 @@ M.regist_press_cb = function(bufnr, cb, cb_ctx, keymap)
 
   local cursor_cb = function()
     local mapping = keymap
-    local bufid = vim.api.nvim_win_get_buf(0)
+    local bufid = bufnr
     log.debug("cursor cb is called, bufid", bufid)
     if M.bufs[bufid] == nil then
       log.debug(string.format("buf id:%d has no cb registed", bufid))

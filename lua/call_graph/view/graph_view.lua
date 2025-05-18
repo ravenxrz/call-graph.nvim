@@ -12,16 +12,21 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
   local defaultConfig = {
     buf = {
       bufid = -1,
-      graph = nil,
+      graph = nil,                                                                      -- This seems to be used for buffer specific graph state, might not be nodes/edges directly
     },
-    namespace_id = vim.api.nvim_create_namespace("call_graph"), -- for highlight
+    namespace_id = vim.api.nvim_create_namespace("call_graph"),                         -- for edge highlight
+    marked_node_namespace_id = vim.api.nvim_create_namespace("call_graph_marked_node"), -- for marked node highlight
     hl_delay_ms = hl_delay_ms or 200,
     toggle_auto_hl = toogle_hl,
     last_hl_time_ms = 0,
     ext_marks_id = {
       edge = {},
+      marked_nodes = {}, -- To store extmark IDs for marked nodes if needed for individual clearing, though namespace clearing is easier
     },
     view_id = self.view_id,
+    nodes_cache = {}, -- Cache for drawn nodes (map: nodeid -> node object)
+    edges_cache = {}, -- Cache for drawn edges (list or map)
+    drawer = nil,     -- Will be set later by draw method for GraphDrawer instance
   }
   self.view_id = self.view_id + 1
   local o = setmetatable(defaultConfig, CallGraphView)
@@ -29,27 +34,62 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
 end
 
 local function clear_all_hl_edge(self)
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    log.debug("clear_all_hl_edge: buffer is invalid, skipping")
+    return
+  end
+
   log.debug("clear all edges, ", vim.inspect(self.ext_marks_id))
   vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.namespace_id, 0, -1)
   self.ext_marks_id.edge = {}
 end
 
+-- New function to clear marked node highlights
+function CallGraphView:clear_marked_node_highlights()
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    log.debug("clear_marked_node_highlights: buffer is invalid, skipping")
+    return
+  end
+
+  log.debug("Clearing marked node highlights")
+  vim.api.nvim_buf_clear_namespace(self.buf.bufid, self.marked_node_namespace_id, 0, -1)
+  self.ext_marks_id.marked_nodes = {} -- Reset if we were storing individual mark IDs
+end
+
 local function clear_all_lines(self)
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    log.debug("clear_all_lines: buffer is invalid, skipping")
+    return
+  end
+
   local line_count = vim.api.nvim_buf_line_count(self.buf.bufid)
   vim.api.nvim_buf_set_lines(self.buf.bufid, 0, line_count, false, {})
 end
 
 function CallGraphView:clear_view()
-  if self.buf.graph then
-    self.buf.graph:set_modifiable(true)
-    clear_all_lines(self)
-    clear_all_hl_edge(self)
-    self.buf.graph:set_modifiable(false)
+  if self.buf.bufid ~= -1 and vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    if self.buf.graph then
+      self.buf.graph:set_modifiable(true)
+      clear_all_lines(self)
+      clear_all_hl_edge(self)
+      self:clear_marked_node_highlights()
+      self.buf.graph:set_modifiable(false)
+    else
+      clear_all_lines(self)
+      clear_all_hl_edge(self)
+      self:clear_marked_node_highlights()
+    end
   end
+
   self.last_hl_time_ms = 0
   self.ext_marks_id = {
     edge = {},
+    marked_nodes = {},
   }
+  
+  -- 不要清除缓存，而是保留它们
+  -- self.nodes_cache = {}
+  -- self.edges_cache = {}
 end
 
 function CallGraphView:set_hl_delay_ms(delay_ms)
@@ -89,10 +129,10 @@ local function overlap_node(row, col, node)
 end
 
 local function overlap_edge(row, col, edge)
-  for _, sub_edge in ipairs(edge.sub_edges) do
+  for _, sub_edge in ipairs(edge.sub_edges or {}) do
     if
-      (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col)
-      or (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row)
+        (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col)
+        or (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row)
     then
       return true
     end
@@ -126,14 +166,16 @@ end
 
 local function jumpto(pos_params)
   local uri = pos_params.textDocument.uri
-  local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
-  local character = pos_params.position.character -- Neovim 的列号从 1 开始
   -- 将 URI 转换为文件路径
   local file_path = vim.uri_to_fname(uri)
   -- 打开文件
   vim.cmd("edit " .. file_path)
-  -- 跳转到指定位置
-  vim.api.nvim_win_set_cursor(0, { line, character })
+  -- 如果有位置信息，则跳转到指定位置
+  if pos_params.position then
+    local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+    local character = pos_params.position.character -- Neovim 的列号从 1 开始
+    vim.api.nvim_win_set_cursor(0, { line, character })
+  end
 end
 
 ---@param row integer
@@ -150,19 +192,28 @@ local function goto_event_cb(row, col, ctx)
     local jump_item = {}
 
     -- 添加节点本身的跳转选项
-    table.insert(jump_item, target_node.text)
-    table.insert(jump_choice, target_node.usr_data.attr.pos_params)
+    if target_node.usr_data and target_node.usr_data.attr and target_node.usr_data.attr.pos_params then
+      table.insert(jump_item, target_node.text)
+      table.insert(jump_choice, target_node.usr_data.attr.pos_params)
+    else
+      log.warn("Node is missing position parameters:", target_node.text)
+      return {}, {}
+    end
 
     -- 收集入边
-    for _, edge in ipairs(target_node.incoming_edges) do
-      table.insert(jump_item, get_edge_text(edge))
-      table.insert(jump_choice, edge.pos_params)
+    for _, edge in ipairs(target_node.incoming_edges or {}) do
+      if edge.pos_params then
+        table.insert(jump_item, get_edge_text(edge))
+        table.insert(jump_choice, edge.pos_params)
+      end
     end
 
     -- 收集出边
-    for _, edge in ipairs(target_node.outcoming_edges) do
-      table.insert(jump_item, get_edge_text(edge))
-      table.insert(jump_choice, edge.pos_params)
+    for _, edge in ipairs(target_node.outcoming_edges or {}) do
+      if edge.pos_params then
+        table.insert(jump_item, get_edge_text(edge))
+        table.insert(jump_choice, edge.pos_params)
+      end
     end
 
     return jump_item, jump_choice
@@ -182,6 +233,11 @@ local function goto_event_cb(row, col, ctx)
 
   -- 处理重叠情况（节点或边）
   local function handle_overlap(items, choices)
+    if #items == 0 or #choices == 0 then
+      log.warn("No valid items to jump to")
+      return
+    end
+
     if #items == 1 then
       jumpto(choices[1])
     else
@@ -191,16 +247,18 @@ local function goto_event_cb(row, col, ctx)
   end
 
   log.debug("user press", row, col)
-  local nodes = ctx.nodes
-  local edges = ctx.edges
+  local nodes = ctx.nodes or {}
+  local edges = ctx.edges or {}
+  log.debug("all nodes", vim.inspect(nodes))
+  log.debug("all edges", vim.inspect(edges))
 
   -- 检查是否与节点重叠
   log.debug("compare node")
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
   if #overlaps_nodes ~= 0 then
     if #overlaps_nodes ~= 1 then
-      assert(false, string.format("find overlaps nodes num is larger than 1: %d", #overlaps_nodes))
-      return
+      log.warn(string.format("find overlaps nodes num is larger than 1: %d, using first one", #overlaps_nodes))
+      -- 继续处理第一个节点，而不是中断
     end
     local target_node = overlaps_nodes[1]
     log.debug("pos overlaps with node", target_node.text)
@@ -216,9 +274,11 @@ local function goto_event_cb(row, col, ctx)
   if #overlaps_edges ~= 0 then
     local edge_items = {}
     local edge_choices = {}
-    for _, edge in ipairs(overlaps_edges) do
-      table.insert(edge_items, get_edge_text(edge))
-      table.insert(edge_choices, edge.pos_params)
+    for _, edge in ipairs(overlaps_edges or {}) do
+      if edge.pos_params then
+        table.insert(edge_items, get_edge_text(edge))
+        table.insert(edge_choices, edge.pos_params)
+      end
     end
     handle_overlap(edge_items, edge_choices)
   end
@@ -266,15 +326,16 @@ local function create_floating_window(cur_buf, text)
 end
 
 local function show_node_info(row, col, ctx)
-  log.debug("user press", row, col)
   local self = ctx.self
-  local nodes = ctx.nodes
+  local nodes = ctx.nodes or {}
+  log.debug("user press", row, col)
+  log.debug("all nodes", vim.inspect(nodes))
   assert(self ~= nil, "")
 
   -- who calls this node
   local get_callers = function(node)
     local callers = {}
-    for _, edge in ipairs(node.incoming_edges) do
+    for _, edge in ipairs(node.incoming_edges or {}) do
       table.insert(callers, "- " .. edge.from_node.text)
     end
     return callers
@@ -283,7 +344,7 @@ local function show_node_info(row, col, ctx)
   -- node calls who?
   local get_callees = function(node)
     local callees = {}
-    for _, edge in ipairs(node.outcoming_edges) do
+    for _, edge in ipairs(node.outcoming_edges or {}) do
       table.insert(callees, " - " .. edge.to_node.text)
     end
     return callees
@@ -302,9 +363,16 @@ local function show_node_info(row, col, ctx)
     end
     local target_node = overlaps_nodes[1]
     local fnode = target_node.usr_data
+
+    -- 安全检查usr_data属性
+    if not fnode or not fnode.attr or not fnode.attr.pos_params then
+      vim.notify("Node missing position data", vim.log.levels.WARN)
+      return
+    end
+
     local pos_params = fnode.attr.pos_params
     local uri = pos_params.textDocument.uri
-    local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
+    local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
     local character = pos_params.position.character -- Neovim 的列号从 1 开始
     local file_path = vim.uri_to_fname(uri)
     local text = string.format("%s:%d:%d", file_path, line, character)
@@ -334,7 +402,7 @@ local function cursor_hold_cb(row, col, ctx)
   -- clear hl, redraw hl
   clear_all_hl_edge(self)
   -- check node
-  local nodes = ctx.nodes
+  local nodes = ctx.nodes or {}
   local overlaps_nodes = find_overlaps_nodes(nodes, row, col)
   log.info("find overlap node num", #overlaps_nodes)
   if #overlaps_nodes ~= 0 then -- find node
@@ -355,13 +423,13 @@ local function cursor_hold_cb(row, col, ctx)
       )
     )
     -- hl incoming
-    for _, edge in pairs(target_node.incoming_edges) do
+    for _, edge in pairs(target_node.incoming_edges or {}) do
       if not hl_edge(self, edge) then
         log.error("highlight edge of node", target_node.text, "incoming edges", edge:to_string())
       end
     end
     -- hl outcoming
-    for _, edge in pairs(target_node.outcoming_edges) do
+    for _, edge in pairs(target_node.outcoming_edges or {}) do
       if not hl_edge(self, edge) then
         log.error("highlight edge of node", target_node.text, "outcoming edges", edge:to_string())
       end
@@ -369,11 +437,11 @@ local function cursor_hold_cb(row, col, ctx)
     return
   end
   -- check edge
-  local edges = ctx.edges
+  local edges = ctx.edges or {}
   log.info("find overlap edge num", #edges)
   local overlaps_edges = find_overlaps_edges(edges, row, col)
   if #overlaps_edges ~= 0 then
-    for _, edge in ipairs(overlaps_edges) do
+    for _, edge in ipairs(overlaps_edges or {}) do
       log.info(string.format("row:%d col:%d overlap with edge:%s", row, col, edge:to_string()))
       hl_edge(self, edge)
     end
@@ -384,7 +452,7 @@ end
 ---@param edge Edge
 local function draw_edge_cb(edge, ctx)
   log.info("draw edge cb", edge:to_string())
-  local dst_edges = ctx.edges
+  local dst_edges = ctx.edges or {}
   -- TODO(zhangxingrui): this is really slow, O(n^2)
   local function find_edge(e)
     for _, dst_edge in ipairs(dst_edges) do
@@ -396,136 +464,195 @@ local function draw_edge_cb(edge, ctx)
   end
   local target_e = find_edge(edge)
   if target_e == nil then
-    log.error("not find edge", edge:to_string(), "in global edges")
-    assert(target_e ~= nil, "not found edge from drawer in view")
+    log.warn("Edge not found in global edges:", edge:to_string(), "- Skipping update of sub_edges")
+    return -- 找不到边时跳过更新，而不是断言失败
   end
   target_e.sub_edges = edge.sub_edges
   log.info("setup edge", target_e:to_string(), "sub edges")
+  
+  -- 更新 edges_cache
+  if ctx.self and ctx.self.edges_cache then
+    for i, cached_edge in ipairs(ctx.self.edges_cache) do
+      if cached_edge:is_same_edge(edge) then
+        ctx.self.edges_cache[i].sub_edges = edge.sub_edges
+        log.debug("[CG-DEBUG] Updated edge in edges_cache: ", vim.inspect(edge))
+        break
+      end
+    end
+  end
 end
 
-local function setup_buf(self, nodes, edges)
+-- 将本地函数setup_buf改为对象方法
+function CallGraphView:setup_buf(nodes, edges)
+  nodes = nodes or {}
+  edges = edges or {}
   Events.regist_press_cb(self.buf.bufid, goto_event_cb, { nodes = nodes, edges = edges }, "gd")
   Events.regist_cursor_hold_cb(self.buf.bufid, cursor_hold_cb, { self = self, nodes = nodes, edges = edges })
   Events.regist_press_cb(self.buf.bufid, show_node_info, { self = self, nodes = nodes }, "K")
 end
 
-local function collect_nodes_and_edges(root_node)
-  local nodes = {}
-  local edges = {}
-  local visited_nodes_incoming = {}
-  local visited_nodes_outcoming = {}
-  local visited_edges = {}
-  local added_nodes = {}
+local GraphDrawer = require("call_graph.view.graph_drawer")
 
-  -- 辅助函数：添加节点到结果集
-  local function add_node(node)
-    if not added_nodes[node.nodeid] then
-      table.insert(nodes, node)
-      added_nodes[node.nodeid] = true
+--- draw the call graph
+---@param root_node GraphNode
+---@param nodes table<nodeid, GraphNode>
+---@param edges table<Edge>
+function CallGraphView:draw(root_node, nodes, edges)
+  log.debug("view draw call. root_node: ", root_node and root_node.text or "nil", "num_nodes: ",
+    nodes and #nodes or (nodes and vim.tbl_count(nodes) or 0), "num_edges: ", 
+    edges and (type(edges) == "table" and #edges or vim.tbl_count(edges)) or 0)
+  log.debug("[CG-DEBUG] nodes type: ", type(nodes))
+  log.debug("[CG-DEBUG] nodes content: ", nodes and vim.inspect(nodes) or "nil")
+  log.debug("[CG-DEBUG] edges type: ", type(edges))
+  log.debug("[CG-DEBUG] edges content: ", edges and vim.inspect(edges) or "nil")
+
+  -- 清除当前视图
+  self:clear_view()
+
+  -- 缓存原始节点和边数据
+  self.nodes_cache = nodes
+  self.edges_cache = edges
+
+  -- 确保 nodes_cache 是一个以 nodeid 为键的映射
+  if type(nodes) == "table" and nodes[1] ~= nil and nodes[1].nodeid ~= nil then
+    log.debug("[CG-DEBUG] Converting nodes list to map")
+    local nodes_map_for_cache = {}
+    for _, node_obj in ipairs(nodes) do
+      if node_obj and node_obj.nodeid then
+        nodes_map_for_cache[node_obj.nodeid] = node_obj
+      end
     end
+    self.nodes_cache = nodes_map_for_cache
+    log.debug("[CG-DEBUG] Converted nodes map: ", vim.inspect(self.nodes_cache))
   end
 
-  -- 辅助函数：添加边到结果集
-  local function add_edge(edge)
-    if not visited_edges[edge.edgeid] then
-      table.insert(edges, edge)
-      visited_edges[edge.edgeid] = true
-    end
+  -- 如果缓冲区无效或未创建，则创建新缓冲区
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    log.info("Creating new buffer for graph view")
+    self.buf.bufid = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(self.buf.bufid, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(self.buf.bufid, "buflisted", false)
+    vim.api.nvim_buf_set_option(self.buf.bufid, "swapfile", false)
+    vim.api.nvim_buf_set_option(self.buf.bufid, "modifiable", true)
   end
 
-  -- 按照 incoming_edges 遍历
-  local function traverse_incoming(node)
-    if visited_nodes_incoming[node.nodeid] then
-      return
-    end
-    visited_nodes_incoming[node.nodeid] = true
-    add_node(node)
+  -- 设置缓冲区名称
+  local target_buf_name = (root_node and root_node.text or "CallGraph") .. "-" .. tonumber(self.view_id)
+  vim.api.nvim_buf_set_name(self.buf.bufid, target_buf_name)
 
-    for _, edge in ipairs(node.incoming_edges or {}) do
-      add_edge(edge)
-      traverse_incoming(edge.from_node)
-    end
-  end
+  -- 设置缓冲区事件处理
+  self:setup_buf(nodes, edges)
 
-  -- 按照 outcoming_edges 遍历
-  local function traverse_outcoming(node)
-    if visited_nodes_outcoming[node.nodeid] then
-      return
-    end
-    visited_nodes_outcoming[node.nodeid] = true
-    add_node(node)
-
-    for _, edge in pairs(node.outcoming_edges or {}) do
-      add_edge(edge)
-      traverse_outcoming(edge.to_node)
-    end
-  end
-
-  -- 先按 incoming_edges 遍历
-  traverse_incoming(root_node)
-
-  -- 再按 outcoming_edges 遍历
-  traverse_outcoming(root_node)
-
-  return nodes, edges
-end
-
-function CallGraphView:draw(root_node, reuse_buf)
-  if root_node == nil then
-    vim.notify("root node is empty", vim.log.levels.WARN)
-    return
-  end
-
-  -- 检查 root_node 的入边和出边情况
-  local has_incoming_edges = #(root_node.incoming_edges or {}) > 0
-  local has_outcoming_edges = #(root_node.outcoming_edges or {}) > 0
-
-  -- 断言同时有入边和出边的场景
-  -- assert(not (has_incoming_edges and has_outcoming_edges),
-  --   "Root node should have either incoming edges or outcoming edges, not both.")
-
-  -- 从 root_node 中收集 nodes 和 edges
-  local nodes, edges = collect_nodes_and_edges(root_node)
-
-  local Drawer = require("call_graph.view.graph_drawer")
-  self:clear_view() -- always redraw everything
-
-  if reuse_buf and self.buf.bufid ~= -1 and vim.api.nvim_buf_is_valid(self.buf.bufid) then
-    -- 复用已有缓冲区，不重新创建
-  else
-    self.buf.bufid = vim.api.nvim_create_buf(true, true)
-  end
-
-  local target_buf_name = root_node.text .. "-" .. tonumber(self.view_id)
-  local full_path = vim.api.nvim_buf_get_name(self.buf.bufid)
-  local file_name = vim.fn.fnamemodify(full_path, ":t")
-  if file_name ~= target_buf_name then
-    vim.api.nvim_buf_set_name(self.buf.bufid, target_buf_name)
-  end
-  setup_buf(self, nodes, edges)
-
-  log.info("generate graph of", root_node.text)
-  log.info("all edge info")
-  for _, edge in ipairs(edges) do
-    log.info("edge", edge:to_string())
-  end
-
-  self.buf.graph = Drawer:new(self.buf.bufid, {
+  -- 创建图形绘制器
+  self.buf.graph = GraphDrawer:new(self.buf.bufid, {
     cb = draw_edge_cb,
-    cb_ctx = { edges = edges },
+    cb_ctx = { edges = edges, self = self },
   })
   self.buf.graph:set_modifiable(true)
+  -- 修复：确保 graph_drawer.nodes 不为 nil
+  self.buf.graph.nodes = self.nodes_cache
 
   -- 根据入边和出边情况调用 draw 函数
-  if has_incoming_edges then
-    self.buf.graph:draw(root_node, true) -- 只有入边，使用传入边遍历
+  if root_node and root_node.incoming_edges and #(root_node.incoming_edges) > 0 then
+    self.buf.graph:draw(root_node, true)  -- 只有入边，使用传入边遍历
   else
     self.buf.graph:draw(root_node, false) -- 其余场景
   end
 
+  -- 确保边数据被正确保存
+  if edges and type(edges) == "table" then
+    self.edges_cache = edges
+    log.debug("[CG-DEBUG] Saved edges to cache: ", vim.inspect(self.edges_cache))
+  end
+
+  -- 切换到当前缓冲区
   vim.api.nvim_set_current_buf(self.buf.bufid)
   self.buf.graph:set_modifiable(false)
   return self.buf.bufid
+end
+
+-- New function to get node at current cursor line
+function CallGraphView:get_node_at_cursor()
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) or vim.api.nvim_get_current_buf() ~= self.buf.bufid then
+    log.warn("[CG-DEBUG] get_node_at_cursor: Not in the correct buffer or buffer invalid.")
+    return nil
+  end
+
+  local cursor_pos = vim.api.nvim_win_get_cursor(0) -- {row, col}, 1-indexed
+  local current_line_one_indexed = cursor_pos[1]
+  local current_col_one_indexed = cursor_pos[2]
+  local current_row_zero_indexed = current_line_one_indexed - 1
+
+  if not self.nodes_cache then
+    log.warn("[CG-DEBUG] get_node_at_cursor: nodes_cache is nil")
+    return nil
+  end
+
+  log.debug(string.format("[CG-DEBUG] Cursor at row=%d, col=%d", current_row_zero_indexed, current_col_one_indexed))
+  log.debug(string.format("[CG-DEBUG] nodes_cache: %s", vim.inspect(self.nodes_cache)))
+  for _, node in pairs(self.nodes_cache) do
+    log.debug(string.format("[CG-DEBUG] Check node: text='%s' (row=%d, col=%d, len=%d, id=%s)", node.text, node.row, node.col, #node.text, tostring(node.nodeid)))
+  end
+
+  for _, node in pairs(self.nodes_cache) do -- nodes_cache is a map {nodeid = node_obj}
+    if node.row == current_row_zero_indexed and 
+       current_col_one_indexed >= node.col and 
+       current_col_one_indexed < node.col + #node.text then
+      log.debug(string.format("[CG-DEBUG] Node found at line %d, col %d: %s (ID: %d)", 
+        current_line_one_indexed, current_col_one_indexed, node.text, node.nodeid))
+      return node
+    end
+  end
+  log.debug(string.format("[CG-DEBUG] No node found at line %d, col %d (row %d)", 
+    current_line_one_indexed, current_col_one_indexed, current_row_zero_indexed))
+  return nil
+end
+
+-- New function to apply highlights for marked nodes
+function CallGraphView:apply_marked_node_highlights(marked_node_ids_list)
+  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
+    log.warn("apply_marked_node_highlights: buffer invalid")
+    return
+  end
+
+  self:clear_marked_node_highlights() -- Clear previous before applying new ones
+
+  if not self.nodes_cache then
+    log.warn("apply_marked_node_highlights: nodes_cache is nil")
+    return
+  end
+
+  local marked_ids_set = {}
+  for _, id in ipairs(marked_node_ids_list) do
+    marked_ids_set[id] = true
+  end
+
+  for node_id, node in pairs(self.nodes_cache) do
+    if marked_ids_set[node_id] then
+      log.debug(string.format("Highlighting marked node: %s (ID: %d) at row %d, col %d", node.text, node.nodeid, node
+      .row, node.col))
+      -- Ensure node.col and node.text are valid
+      if node.row ~= nil and node.col ~= nil and node.text ~= nil then
+        local mark_id = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.marked_node_namespace_id, node.row, node.col, {
+          end_col = node.col + #node.text,
+          hl_group = "CallGraphMarkedNode",
+          priority = 110,                                      -- Higher than edge highlights (typically 100 or default)
+        })
+        table.insert(self.ext_marks_id.marked_nodes, mark_id)  -- Optional, if needed for individual management
+      else
+        log.warn(string.format("Cannot highlight node %s (ID: %d) due to missing row/col/text info.", node.text or "N/A",
+          node.nodeid or -1))
+      end
+    end
+  end
+end
+
+-- New function to get currently drawn graph data
+function CallGraphView:get_drawn_graph_data()
+  return {
+    nodes = self.nodes_cache,     -- This should be the map {nodeid = node_obj}
+    edges = self.edges_cache,     -- This should be the list/map of edge objects
+  }
 end
 
 return CallGraphView
