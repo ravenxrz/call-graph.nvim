@@ -25,6 +25,7 @@ local mermaid_path = ".call_graph.mermaid"
 -- Graph history management
 local graph_history = {}
 local max_history_size = 20
+local history_file_path = vim.fn.stdpath("data") .. "/call_graph_history.json"
 
 -- Mark mode state
 local is_mark_mode_active = false
@@ -33,23 +34,112 @@ local current_graph_nodes_for_marking = nil -- Stores the 'nodes' table of the c
 local current_graph_edges_for_marking = nil -- Stores the 'edges' table of the current graph
 local current_graph_view_for_marking = nil -- Stores the view of the current graph being marked
 
+--- 保存调用图历史到文件
+local function save_history_to_file()
+  -- 创建要保存的数据结构（只保存必要信息，不包括临时的 buf_id）
+  local data_to_save = {}
+  for _, entry in ipairs(graph_history) do
+    if entry.pos_params then  -- 只保存有位置参数的条目
+      table.insert(data_to_save, {
+        root_node_name = entry.root_node_name,
+        call_type = entry.call_type,
+        timestamp = entry.timestamp,
+        pos_params = entry.pos_params
+      })
+    end
+  end
+  
+  -- 将数据编码为 JSON
+  local ok, json_str = pcall(vim.json.encode, data_to_save)
+  if not ok then
+    vim.notify("[CallGraph] Failed to encode history data: " .. (json_str or "unknown error"), vim.log.levels.ERROR)
+    return
+  end
+  
+  -- 写入文件
+  local file = io.open(history_file_path, "w")
+  if not file then
+    vim.notify("[CallGraph] Failed to open history file for writing: " .. history_file_path, vim.log.levels.ERROR)
+    return
+  end
+  
+  file:write(json_str)
+  file:close()
+  log.debug("[CallGraph] History saved to: " .. history_file_path)
+end
+
+--- 从文件加载历史记录
+local function load_history_from_file()
+  -- 检查文件是否存在
+  local file = io.open(history_file_path, "r")
+  if not file then
+    log.debug("[CallGraph] No history file found at: " .. history_file_path)
+    return
+  end
+  
+  -- 读取文件内容
+  local content = file:read("*all")
+  file:close()
+  
+  if content == "" then
+    log.debug("[CallGraph] History file is empty")
+    return
+  end
+  
+  -- 解析 JSON
+  local ok, data = pcall(vim.json.decode, content)
+  if not ok or type(data) ~= "table" then
+    vim.notify("[CallGraph] Failed to parse history file: " .. (data or "unknown error"), vim.log.levels.WARN)
+    return
+  end
+  
+  -- 将加载的数据转换为历史记录格式（初始化 buf_id 为无效值）
+  graph_history = {}
+  for _, entry in ipairs(data) do
+    if entry.pos_params and entry.root_node_name and entry.call_type then
+      table.insert(graph_history, {
+        buf_id = -1,  -- 初始化为无效值，在生成图时会更新
+        root_node_name = entry.root_node_name,
+        call_type = entry.call_type,
+        timestamp = entry.timestamp or os.time(),
+        pos_params = entry.pos_params
+      })
+    end
+  end
+  
+  log.debug("[CallGraph] Loaded " .. #graph_history .. " history entries")
+end
+
 --- Add a graph to history
 ---@param buf_id number The buffer ID of the graph
 ---@param root_node_name string The name of the root node
 ---@param call_type CallType The type of call graph
-local function add_to_history(buf_id, root_node_name, call_type)
-  table.insert(graph_history, 1, {
+---@param root_node table The actual root node object containing position parameters
+local function add_to_history(buf_id, root_node_name, call_type, root_node)
+  -- 确保 root_node 和必要的调用位置信息存在
+  local pos_params = nil
+  if root_node and root_node.usr_data and root_node.usr_data.attr and root_node.usr_data.attr.pos_params then
+    pos_params = vim.deepcopy(root_node.usr_data.attr.pos_params)
+  end
+
+  local history_entry = {
     buf_id = buf_id,
     root_node_name = root_node_name,
     call_type = call_type,
-    timestamp = os.time()
-  })
+    timestamp = os.time(),
+    pos_params = pos_params  -- 存储位置参数，用于重新生成图
+  }
+  
+  table.insert(graph_history, 1, history_entry)
   
   -- Trim history if it exceeds max size
   if #graph_history > max_history_size then
     -- Remove the oldest entry (last in the array)
     table.remove(graph_history, #graph_history)
   end
+  
+  -- 保存历史到文件
+  save_history_to_file()
 end
 
 --- Open the latest graph
@@ -63,15 +153,21 @@ function Caller.open_latest_graph()
   if vim.api.nvim_buf_is_valid(latest.buf_id) then
     vim.cmd("buffer " .. latest.buf_id)
   else
-    vim.notify("[CallGraph] Latest graph buffer is no longer valid", vim.log.levels.ERROR)
+    -- 尝试重新生成图
+    Caller.regenerate_graph_from_history(latest)
   end
 end
 
 --- Show graph history and let user select
 function Caller.show_graph_history()
   if #graph_history == 0 then
-    vim.notify("[CallGraph] No graph history available", vim.log.levels.WARN)
-    return
+    -- 尝试从文件加载历史
+    load_history_from_file()
+    
+    if #graph_history == 0 then
+      vim.notify("[CallGraph] No graph history available", vim.log.levels.WARN)
+      return
+    end
   end
 
   local items = {}
@@ -84,7 +180,7 @@ function Caller.show_graph_history()
     elseif entry.call_type == Caller.CallType.OUTCOMING_CALL then
       call_type_str = "Outcoming"
     elseif entry.call_type == Caller.CallType.SUBGRAPH_CALL then
-      call_type_str = "Subgraph" -- Display name for subgraph
+      call_type_str = "Subgraph"
     end
 
     local time_str = os.date("%Y-%m-%d %H:%M:%S", entry.timestamp)
@@ -101,10 +197,56 @@ function Caller.show_graph_history()
       if vim.api.nvim_buf_is_valid(entry.buf_id) then
         vim.cmd("buffer " .. entry.buf_id)
       else
-        vim.notify("[CallGraph] Selected graph buffer is no longer valid", vim.log.levels.ERROR)
+        -- 尝试重新生成图
+        Caller.regenerate_graph_from_history(entry)
       end
     end
   end)
+end
+
+--- 从历史记录重新生成调用图
+---@param history_entry table 历史记录条目
+function Caller.regenerate_graph_from_history(history_entry)
+  if not history_entry or not history_entry.pos_params then
+    vim.notify("[CallGraph] Cannot regenerate graph: missing position data", vim.log.levels.ERROR)
+    return
+  end
+  
+  -- 保存当前文件路径和位置
+  local current_buf = vim.api.nvim_get_current_buf()
+  local current_win = vim.api.nvim_get_current_win()
+  local current_pos = vim.api.nvim_win_get_cursor(current_win)
+  
+  -- 打开目标文件
+  local uri = history_entry.pos_params.textDocument.uri
+  local file_path = vim.uri_to_fname(uri)
+  local success = pcall(vim.cmd, "edit " .. file_path)
+  
+  if not success then
+    vim.notify("[CallGraph] Failed to open file: " .. file_path, vim.log.levels.ERROR)
+    return
+  end
+  
+  -- 移动光标到目标位置
+  local pos = history_entry.pos_params.position
+  vim.api.nvim_win_set_cursor(0, {pos.line + 1, pos.character})
+  
+  -- 使用相应的命令生成调用图
+  local opts = vim.deepcopy(require("call_graph").opts)
+  local function on_generated_callback(buf_id, root_node_name)
+    -- 更新历史记录中的 buf_id
+    for i, entry in ipairs(graph_history) do
+      if entry == history_entry then
+        graph_history[i].buf_id = buf_id
+        break
+      end
+    end
+  end
+  
+  -- 根据调用图类型生成
+  Caller.generate_call_graph(opts, history_entry.call_type, on_generated_callback)
+  
+  -- 注意：我们不需要恢复原始位置，因为生成的调用图会成为焦点
 end
 
 --- Creates a new caller instance.
@@ -171,7 +313,8 @@ function Caller.generate_call_graph(opts, call_type, on_generated_callback)
     -- current_graph_view_for_marking = caller.view
 
     local root_node_name = root_node and root_node.text or "UnknownRoot"
-    add_to_history(buf_id, root_node_name, call_type)
+    -- 传递完整的root_node，以便保存位置信息
+    add_to_history(buf_id, root_node_name, call_type, root_node)
     
     -- Update mermaid file if export is enabled
     if opts.export_mermaid_graph then
@@ -526,5 +669,32 @@ function generate_subgraph(marked_node_ids, nodes, edges)
 end
 
 Caller.generate_subgraph = generate_subgraph
+
+-- 在初始化时加载历史记录
+local function init()
+  load_history_from_file()
+end
+
+-- 在模块加载时执行初始化
+init()
+
+-- 将 graph_history 更新的函数暴露出去，供测试使用
+Caller._get_graph_history = function()
+  return graph_history
+end
+
+Caller._set_max_history_size = function(size)
+  max_history_size = size
+  -- 如果当前历史记录超过了新的大小限制，则裁剪
+  while #graph_history > max_history_size do
+    table.remove(graph_history)
+  end
+end
+
+-- 暴露 load_history_from_file 供测试使用
+Caller.load_history_from_file = load_history_from_file
+
+-- 暴露 add_to_history 供测试使用
+Caller.add_to_history = add_to_history
 
 return Caller

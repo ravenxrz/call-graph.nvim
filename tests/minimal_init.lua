@@ -9,3 +9,15 @@ vim.opt.rtp:append(plenary_dir)
 
 vim.cmd("runtime plugin/plenary.vim")
 require("plenary.busted")
+
+-- 添加JSON支持
+if not vim.json then
+  vim.json = {
+    encode = function(obj)
+      return vim.fn.json_encode(obj)
+    end,
+    decode = function(json_str)
+      return vim.fn.json_decode(json_str)
+    end
+  }
+end
