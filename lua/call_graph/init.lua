@@ -51,7 +51,7 @@ local function create_user_cmd()
     Caller.open_latest_graph()
   end, { desc = "Open the most recently generated call graph" })
 
-  vim.api.nvim_create_user_command("CallGraphHistoryGraph", function()
+  vim.api.nvim_create_user_command("CallGraphHistory", function()
     Caller.show_graph_history()
   end, { desc = "Show and select from call graph history" })
 
