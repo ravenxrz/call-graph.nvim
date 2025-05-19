@@ -3,6 +3,8 @@ local CallGraphView = require("call_graph.view.graph_view")
 local Edge = require("call_graph.class.edge")
 local Caller = require("call_graph.caller")
 
+print("开始执行 graph_drawer_spec.lua 测试")
+
 local function table_eq(tbl1, tbl2)
   if #tbl1 ~= #tbl2 then
     return false
@@ -716,13 +718,13 @@ describe("GraphDrawer", function()
     end)
   end)
 
-  it("should render subgraph with two marked nodes and one edge", function()
+  it("should render subgraph with marked nodes", function()
     -- 构造原始节点和边
     local node1 = {
       row = 0,
       col = 0,
       text = "a/test.cc:2",
-      level = 2, -- 被指向，level更高
+      level = 2,
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 1,
@@ -732,7 +734,7 @@ describe("GraphDrawer", function()
       row = 0,
       col = 0,
       text = "b/test.cc:4",
-      level = 1, -- 作为root
+      level = 1,
       incoming_edges = {},
       outcoming_edges = {},
       nodeid = 2,
@@ -752,8 +754,7 @@ describe("GraphDrawer", function()
 
     -- 用 graph_drawer 渲染
     graph_drawer.nodes = subgraph.nodes_map
-    -- 以 node2 作为 root
-    graph_drawer:draw(subgraph.nodes_map[2], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     
     -- 定义预期的图形输出
@@ -838,7 +839,7 @@ describe("GraphDrawer", function()
 
     -- 用 graph_drawer 渲染
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(subgraph.nodes_list[1], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
     -- 定义预期的图形输出
@@ -897,7 +898,7 @@ describe("GraphDrawer", function()
 
     -- 用 graph_drawer 渲染
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(nil, subgraph.nodes_list, subgraph.edges)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
     -- 定义预期的图形输出
@@ -949,7 +950,7 @@ describe("GraphDrawer", function()
 
     -- 用 graph_drawer 渲染
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(subgraph.nodes_map[2], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     
     -- 定义预期的图形输出
@@ -976,7 +977,7 @@ describe("GraphDrawer", function()
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(subgraph.nodes_map[2], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     assert.same({ "b/test.cc:4---->a/test.cc:2" }, lines)
   end)
@@ -1079,7 +1080,7 @@ describe("GraphDrawer", function()
 
     -- 渲染子图
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(subgraph.nodes_map[1], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
     -- 验证渲染结果
@@ -1161,7 +1162,7 @@ describe("GraphDrawer", function()
 
     -- 渲染子图
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(subgraph.nodes_map[1], false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
     -- 验证渲染结果 - 应该只显示连接的节点
@@ -1258,7 +1259,7 @@ describe("GraphDrawer", function()
 
     -- 验证渲染结果
     graph_drawer.nodes = subgraph.nodes_map
-    graph_drawer:draw(sub_node1, false)
+    graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     assert.same({ "test.cc:10---->test.cc:20" }, lines)
   end)
@@ -1385,3 +1386,5 @@ describe("GraphDrawer", function()
     assert.is_not_nil(edge.to_node.usr_data, "to_node should have usr_data for gd")
   end)
 end)
+
+print("所有 GraphDrawer 测试用例执行完成")
