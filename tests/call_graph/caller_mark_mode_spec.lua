@@ -58,7 +58,7 @@ local function create_mock_fn(return_value)
   return setmetatable(fn, { __call = fn.__call })
 end
 
--- 自定义断言辅助函数
+-- Custom assertion helper functions
 local function is_empty(tbl)
   if type(tbl) ~= "table" then
     return false
@@ -111,50 +111,50 @@ local mock_CallGraphView_module = {
   end),
 }
 
--- 使用猴子补丁来跟踪和验证Caller模块函数的行为
+-- Use monkey patching to track and verify behavior of Caller module functions
 describe("Caller Mark Mode", function()
   local original_vim_api, original_log, original_CallGraphView_package, original_init_package
   local original_vim_notify, original_vim_log
   local original_start_mark_mode, original_mark_node_under_cursor, original_end_mark_mode
   local n1_mock, n2_mock
 
-  -- 跟踪状态的变量
+  -- Status tracking variables
   local mark_mode_status = {
     is_mark_mode_active = false,
     marked_node_ids = {},
     notify_messages = {},
   }
 
-  -- 模拟g_caller对象
+  -- Mock g_caller object
   local mock_g_caller
 
   before_each(function()
-    -- 保存原始vim相关对象
+    -- Save original vim related objects
     original_vim_api = vim.api
     original_vim_notify = vim.notify
     original_vim_log = vim.log
 
-    -- 保存原始Caller方法
+    -- Save original Caller methods
     original_start_mark_mode = Caller.mark_node_under_cursor
     original_mark_node_under_cursor = Caller.mark_node_under_cursor
     original_end_mark_mode = Caller.end_mark_mode_and_generate_subgraph
 
-    -- 重置测试状态
+    -- Reset test state
     mark_mode_status = {
       is_mark_mode_active = false,
       marked_node_ids = {},
       notify_messages = {},
     }
 
-    -- 模拟vim.api
+    -- Mock vim.api
     vim.api = mock_vim_api
 
-    -- 模拟vim.notify
+    -- Mock vim.notify
     vim.notify = function(msg, level)
       table.insert(mark_mode_status.notify_messages, { msg = msg, level = level })
     end
 
-    -- 模拟vim.log.levels
+    -- Mock vim.log.levels
     vim.log = {
       levels = {
         DEBUG = 1,
@@ -174,7 +174,7 @@ describe("Caller Mark Mode", function()
     original_init_package = package.loaded["call_graph.init"]
     package.loaded["call_graph.init"] = mock_init_module
 
-    -- 实用函数用于深拷贝，避免循环引用
+    -- Utility function for deep copy, avoiding circular references
     _G.vim = _G.vim or {}
     _G.vim.deepcopy = function(orig, seen)
       seen = seen or {}
@@ -195,7 +195,7 @@ describe("Caller Mark Mode", function()
       return setmetatable(copy, getmetatable(orig))
     end
 
-    -- 添加辅助函数
+    -- Add helper functions
     _G.vim.tbl_count = function(t)
       local count = 0
       for _, _ in pairs(t) do
@@ -217,7 +217,7 @@ describe("Caller Mark Mode", function()
     end
     mock_CallGraphView_module.new:reset()
 
-    -- 创建模拟g_caller实例
+    -- Create mock g_caller instance
     mock_g_caller = {
       view = mock_CallGraphView_module.new(),
       data = {
@@ -227,7 +227,7 @@ describe("Caller Mark Mode", function()
       },
     }
 
-    -- 确保后续调用get_current_buf时返回g_caller的view buffer
+    -- Ensure subsequent calls to get_current_buf return g_caller's view buffer
     mock_vim_api.nvim_get_current_buf:returns_value(function()
       if mock_g_caller and mock_g_caller.view and mock_g_caller.view.buf then
         return mock_g_caller.view.buf.bufid
@@ -238,9 +238,9 @@ describe("Caller Mark Mode", function()
     n1_mock = create_mock_graph_node(101, "TestNode1", 1, 0)
     n2_mock = create_mock_graph_node(102, "TestNode2", 2, 0)
 
-    -- 猴子补丁Caller.mark_node_under_cursor
+    -- Monkey patch Caller.mark_node_under_cursor
     Caller.mark_node_under_cursor = function()
-      -- 1. 处理启动mark模式的逻辑（原start_mark_mode功能）
+      -- 1. Handle logic to start mark mode (original start_mark_mode functionality)
       if not mark_mode_status.is_mark_mode_active then
         if not mock_g_caller or not mock_g_caller.view or not mock_g_caller.view.buf then
           vim.notify("[CallGraph] No active call graph to mark.", vim.log.levels.WARN)
@@ -275,7 +275,7 @@ describe("Caller Mark Mode", function()
         end
       end
 
-      -- 2. 处理mark节点逻辑（原mark_node_under_cursor功能）
+      -- 2. Handle mark node logic (original mark_node_under_cursor functionality)
       if not mark_mode_status.is_mark_mode_active then
         vim.notify("[CallGraph] Mark mode is not active. Start with CallGraphMarkNode.", vim.log.levels.WARN)
         return
@@ -355,6 +355,25 @@ describe("Caller Mark Mode", function()
 
       vim.notify("[CallGraph] Subgraph generated.", vim.log.levels.INFO)
       mark_mode_status.is_mark_mode_active = false
+    end
+
+    Caller.exit_mark_mode = function()
+      if not mark_mode_status.is_mark_mode_active then
+        vim.notify("[CallGraph] Not in mark mode", vim.log.levels.INFO)
+        return
+      end
+
+      if mock_g_caller.view.clear_marked_node_highlights then
+        mock_g_caller.view:clear_marked_node_highlights()
+      end
+
+      mark_mode_status.is_mark_mode_active = false
+      mark_mode_status.marked_node_ids = {}
+      current_graph_nodes_for_marking = nil
+      current_graph_edges_for_marking = nil
+      current_graph_view_for_marking = nil
+
+      vim.notify("[CallGraph] Mark mode exited.", vim.log.levels.INFO)
     end
   end)
 
@@ -750,9 +769,9 @@ describe("Caller Mark Mode", function()
         -- 直接调用add_to_history
         Caller.add_to_history(
           new_view.buf.bufid,
-          "测试子图",
+          "Test subgraph",
           Caller.CallType.SUBGRAPH_CALL,
-          { text = "测试子图" }
+          { text = "Test subgraph" }
         )
 
         -- 清理标记状态
@@ -850,7 +869,7 @@ describe("Caller Mark Mode", function()
         current_graph_view_for_marking = nil
         state_reset = true
 
-        vim.notify("[CallGraph] 已退出标记模式", vim.log.levels.INFO)
+        vim.notify("[CallGraph] Mark mode exited.", vim.log.levels.INFO)
       end
 
       -- 调用退出函数
@@ -867,7 +886,7 @@ describe("Caller Mark Mode", function()
       -- 验证通知
       local found_exit_msg = false
       for _, notify in ipairs(mark_mode_status.notify_messages) do
-        if notify.msg:match("已退出标记模式") then
+        if notify.msg:match("Mark mode exited") then
           found_exit_msg = true
           break
         end
@@ -889,7 +908,7 @@ describe("Caller Mark Mode", function()
       -- 验证通知
       local found_not_active_msg = false
       for _, notify in ipairs(mark_mode_status.notify_messages) do
-        if notify.msg:match("未处于标记模式") then
+        if notify.msg:match("Mark mode is not active") then
           found_not_active_msg = true
           break
         end

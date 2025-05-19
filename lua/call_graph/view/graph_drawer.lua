@@ -1,5 +1,5 @@
 -- graph_drawer.lua
--- NOTE: 自实现的所有绘图函数采用左开右闭的区间描述
+-- NOTE: All drawing functions use left-open right-closed intervals
 local GraphDrawer = {}
 local Edge = require("call_graph.class.edge")
 local SubEdge = require("call_graph.class.subedge")
@@ -39,7 +39,7 @@ function GraphDrawer:clear_buf()
   end
 end
 
--- 确保缓冲区有足够的行
+-- ensure the buffer has enough lines
 ---@param self
 ---@param target_line_cnt integer, row number, zero-based indexing, inclusive
 local function ensure_buffer_has_lines(self, target_line_cnt)
@@ -53,7 +53,7 @@ local function ensure_buffer_has_lines(self, target_line_cnt)
   end
 end
 
--- 确保缓冲区行有足够的列
+-- ensure the buffer line has enough columns
 ---@param self
 ---@param line integer, row number, zoer-based indexing , inclusive
 ---@param required_col integer, column number, zero-based indexing, exclusive
@@ -97,13 +97,13 @@ function GraphDrawer:draw_v_line(start_row, end_row, col, direction)
   for line = start_row, end_row - 1 do
     ensure_buffer_line_has_cols(self, line, col + 1)
 
-    -- 获取当前行的文本
+    -- get current line text
     local current_line = vim.api.nvim_buf_get_lines(self.bufnr, line, line + 1, false)[1] or ""
     local current_char = string.sub(current_line, col + 1, col + 1) or ""
 
-    -- 只有当当前字符为空字符串时才进行覆盖
+    -- only override when current character is empty string
     if current_char == " " or current_char == "|" then
-      -- 处理箭头样式
+      -- handle arrow style
       local fill = "|"
       if direction == Direction.UP and line == start_row then
         fill = "^"
@@ -120,7 +120,7 @@ end
 --- @param end_col integer, end of cold , exclusive
 --- @param direction string, which direction
 function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
-  -- 增强错误检查
+  -- enhanced error checking
   if type(start_col) ~= "number" then
     log.error("start_col is not a number: " .. tostring(start_col))
     return
@@ -130,10 +130,10 @@ function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
     return
   end
 
-  -- 确保start_col <= end_col
+  -- ensure start_col <= end_col
   if start_col > end_col then
     log.error(string.format("Invalid column range: start_col=%d > end_col=%d", start_col, end_col))
-    -- 交换两个值以避免断言失败
+    -- swap values to avoid assertion failure
     start_col, end_col = end_col, start_col
   end
 
@@ -147,7 +147,7 @@ function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
   ensure_buffer_has_lines(self, row + 1)
   ensure_buffer_line_has_cols(self, row, end_col)
 
-  -- 获取当前行的文本
+  -- get current line text
   local current_line = vim.api.nvim_buf_get_lines(self.bufnr, row, row + 1, false)[1] or ""
   local fill_table = {}
   for i = start_col, end_col - 1 do
@@ -161,7 +161,7 @@ function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
       end
       table.insert(fill_table, fill)
     else
-      table.insert(fill_table, current_char) -- 保留当前字符
+      table.insert(fill_table, current_char) -- keep current character
     end
   end
 
@@ -194,7 +194,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
   local fill_end_row = 0
 
   local sub_edges = {}
-  -- 是否是同一行
+  -- check if on the same row
   if lhs.row == rhs.row then
     table.insert(sub_edges, SubEdge:new(lhs.row, lhs.col + #lhs.text, lhs.row + 1, rhs.col))
     local direction = point_to_rhs and Direction.RIGHT or Direction.LEFT
@@ -214,7 +214,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
     return
   end
 
-  --是否是同一列
+  -- check if on the same column
   if lhs.col == rhs.col then
     assert(lhs.row ~= rhs.row, string.format("lhs.row: %d, rhs.row: %d", lhs.row, rhs.row))
     local v_start, v_end
@@ -243,7 +243,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
     return
   end
 
-  -- 处理不同行不同列的情况：绘制L型连线
+  -- handle different row and column: draw L-shaped connection
   local lhs_text_len = type(lhs.text) == "string" and #lhs.text or tostring(lhs.text):len()
   local lhs_end_col = lhs.col + lhs_text_len
   local rhs_start_col = rhs.col
@@ -262,7 +262,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
     )
   )
 
-  -- 绘制lhs到中间列的水平线
+  -- draw horizontal line from lhs to middle column
   assert(mid_col > lhs_end_col, string.format("mid_col: %d, lhs_end_col: %d", mid_col, lhs_end_col))
   table.insert(sub_edges, SubEdge:new(lhs.row, lhs_end_col, lhs.row + 1, mid_col))
   log.debug(
@@ -282,7 +282,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
     self:draw_h_line(lhs.row, lhs_end_col, mid_col, Direction.LEFT)
   end
 
-  -- 绘制中间列的垂直线
+  -- draw vertical line in middle column
   local v_start = math.min(lhs.row, rhs.row)
   local v_end = math.max(lhs.row, rhs.row)
   assert(v_start ~= v_end, string.format("v_start: %d, v_end: %d", v_start, v_end))
@@ -290,7 +290,7 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
   self:draw_v_line(v_start + 1, v_end, mid_col - 1)
   table.insert(sub_edges, SubEdge:new(v_start + 1, mid_col - 1, v_end, mid_col))
 
-  -- 绘制中间列到rhs左侧的水平线
+  -- draw horizontal line from middle column to rhs left side
   assert(mid_col < rhs_start_col, string.format("mid_col: %d, rhs_start_col: %d", mid_col, rhs_start_col))
   table.insert(sub_edges, SubEdge:new(rhs.row, mid_col - 1, rhs.row + 1, rhs_start_col))
   log.debug(
@@ -314,11 +314,11 @@ end
 
 function GraphDrawer:draw(root_node, traverse_by_incoming)
   if (not root_node) and (not self.nodes or next(self.nodes) == nil) then
-    -- 没有根节点且没有任何节点，直接返回
+    -- no root node and no nodes, return directly
     return
   end
   if not root_node then
-    -- 如果没有指定根节点，选择第一个节点作为根节点
+    -- if no root node specified, select the first node as root node
     for _, node in pairs(self.nodes) do
       root_node = node
       break
@@ -335,7 +335,7 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
   local cur_col = 0
   assert(self.col_spacing >= 5)
 
-  -- 第一轮：绘制所有节点
+  -- first round: draw all nodes
   local added = {}
   added[root_node.nodeid] = true
   while #queue > 0 do
@@ -346,7 +346,7 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
       for _, n in ipairs(cur_level_nodes) do
         self:draw_node(n)
       end
-      -- uadate this level position
+      -- update this level position
       cur_row = 0
       cur_col = self.col_spacing + (cur_level_max_col[cur_level] or 0)
       cur_level = current.level
@@ -362,7 +362,7 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
     cur_row = cur_row + self.row_spacing
 
     -- push bfs next level
-    -- 根据 traverse_by_incoming 参数选择遍历的边
+    -- select edges to traverse based on traverse_by_incoming parameter
     local edges = traverse_by_incoming and current.incoming_edges or current.outcoming_edges
     for _, edge in ipairs(edges) do
       local child = traverse_by_incoming and edge.from_node or edge.to_node
@@ -378,13 +378,13 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
   end
   cur_level_nodes = nil
 
-  -- 第二轮：绘制所有边
+  -- second round: draw all edges
   local visit = {}
   local function traverse(node)
     log.debug("traverse of node", node.text, "node id", node.nodeid)
     visit[node.nodeid] = true
     log.debug("mark node", node.text, "node id", node.nodeid, "visited")
-    -- 根据 traverse_by_incoming 参数选择遍历的边
+    -- select edges to traverse based on traverse_by_incoming parameter
     local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
     for _, edge in ipairs(edges) do
       local child = traverse_by_incoming and edge.from_node or edge.to_node
