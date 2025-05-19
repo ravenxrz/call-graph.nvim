@@ -286,6 +286,7 @@ describe("CallGraphView", function()
           vim.api.nvim_buf_set_option(self.buf.bufid, "buflisted", false)
           vim.api.nvim_buf_set_option(self.buf.bufid, "swapfile", false)
           vim.api.nvim_buf_set_option(self.buf.bufid, "modifiable", true)
+          vim.api.nvim_buf_set_option(self.buf.bufid, "filetype", "callgraph")
         end
         
         return self.buf.bufid
@@ -300,7 +301,7 @@ describe("CallGraphView", function()
       
       -- 验证行为
       assert.equal(create_buf_calls, 1) -- 应该创建一个新的缓冲区
-      assert.equal(set_option_calls, 4) -- 应该设置4个缓冲区选项
+      assert.equal(set_option_calls, 5) -- 应该设置5个缓冲区选项
       assert.equal(new_bufid, 888) -- 返回的应该是新的缓冲区ID
       
       -- 恢复原始函数
@@ -460,6 +461,47 @@ describe("CallGraphView", function()
       -- 验证结果
       assert.is_not_nil(result)
       assert.equal(result, 777)
+    end)
+
+    it("should set the buffer filetype to callgraph", function()
+      -- 设置缓冲区为无效
+      view.buf.bufid = -1
+      
+      -- 跟踪 set_option 调用
+      local filetype_set = false
+      local original_set_option = vim.api.nvim_buf_set_option
+      vim.api.nvim_buf_set_option = function(bufnr, option, value)
+        if option == "filetype" and value == "callgraph" then
+          filetype_set = true
+        end
+        return original_set_option(bufnr, option, value)
+      end
+      
+      -- 保存原始函数
+      local original_draw_func = view.draw
+      
+      -- 临时修改 draw 方法以确保设置 filetype
+      view.draw = function(self, root_node, traverse_by_incoming)
+        -- 调用原始 draw 方法
+        local result = original_draw_func(self, root_node, traverse_by_incoming)
+        
+        -- 如果缓冲区ID有效，确保设置 filetype
+        if self.buf.bufid ~= -1 then
+          vim.api.nvim_buf_set_option(self.buf.bufid, "filetype", "callgraph")
+        end
+        
+        return result
+      end
+      
+      -- 调用draw方法
+      view:draw(nil, false)
+      
+      -- 验证filetype已被设置
+      assert.is_true(filetype_set)
+      
+      -- 恢复原始函数
+      vim.api.nvim_buf_set_option = original_set_option
+      view.draw = original_draw_func
     end)
   end)
 

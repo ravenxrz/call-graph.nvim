@@ -521,7 +521,7 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
     local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
     
     -- 处理每条边
-    for _, edge in ipairs(edges) do
+    for _, edge in ipairs(edges or {}) do
       -- 添加到边集合
       table.insert(edges_list, edge)
       
@@ -532,14 +532,16 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
     
     -- 确保另一方向的边也被记录（虽然不用于遍历）
     local other_edges = traverse_by_incoming and node.outcoming_edges or node.incoming_edges
-    for _, edge in ipairs(other_edges) do
+    for _, edge in ipairs(other_edges or {}) do
       -- 只添加边到集合，不递归遍历
       table.insert(edges_list, edge)
     end
   end
   
-  -- 开始从根节点收集
-  collect_nodes_and_edges(root_node, {})
+  -- 只有当root_node不为nil时才收集节点和边
+  if root_node then
+    collect_nodes_and_edges(root_node, {})
+  end
   
   -- 缓存构建的节点和边数据
   self.nodes_cache = nodes_map
@@ -553,6 +555,7 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
     vim.api.nvim_buf_set_option(self.buf.bufid, "buflisted", false)
     vim.api.nvim_buf_set_option(self.buf.bufid, "swapfile", false)
     vim.api.nvim_buf_set_option(self.buf.bufid, "modifiable", true)
+    vim.api.nvim_buf_set_option(self.buf.bufid, "filetype", "callgraph")
   end
 
   -- 设置缓冲区名称
@@ -572,8 +575,10 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
   -- 设置 GraphDrawer 的节点集
   self.buf.graph.nodes = self.nodes_cache
 
-  -- 调用 GraphDrawer 的 draw 函数
-  self.buf.graph:draw(root_node, traverse_by_incoming)
+  -- 只有当root_node不为nil时才调用GraphDrawer的draw函数
+  if root_node then
+    self.buf.graph:draw(root_node, traverse_by_incoming)
+  end
 
   -- 切换到当前缓冲区
   vim.api.nvim_set_current_buf(self.buf.bufid)
