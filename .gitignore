@@ -41,3 +41,4 @@ luac.out
 
 
 vendor/plenary.nvim
+.call_graph_history.json
