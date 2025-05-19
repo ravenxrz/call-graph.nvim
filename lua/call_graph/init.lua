@@ -51,13 +51,44 @@ local function create_user_cmd()
     Caller.open_latest_graph()
   end, { desc = "Open the most recently generated call graph" })
 
-  vim.api.nvim_create_user_command("CallGraphHistoryGraph", function()
+  vim.api.nvim_create_user_command("CallGraphHistory", function()
     Caller.show_graph_history()
   end, { desc = "Show and select from call graph history" })
+
+  vim.api.nvim_create_user_command("CallGraphMarkNode", function()
+    Caller.mark_node_under_cursor()
+  end, { desc = "Mark/unmark the node under cursor (automatically starts mark mode if not active)" })
+
+  vim.api.nvim_create_user_command("CallGraphMarkEnd", function()
+    Caller.end_mark_mode_and_generate_subgraph()
+  end, { desc = "End marking and generate subgraph from marked nodes" })
+  
+  vim.api.nvim_create_user_command("CallGraphMarkExit", function()
+    Caller.exit_mark_mode()
+  end, { desc = "Exit mark mode without generating subgraph, clears all markings" })
+
+  vim.api.nvim_create_user_command("CallGraphClearHistory", function()
+    Caller.clear_history()
+  end, { desc = "Clear all call graph history (both in memory and on disk)" })
 end
 
 local function setup_hl()
   vim.api.nvim_set_hl(0, "CallGraphLine", { link = "Search" })
+  vim.api.nvim_set_hl(0, "CallGraphMarkedNode", { link = "Visual" })
+end
+
+local function setup_autocmds()
+  -- 创建自动命令组
+  local augroup = vim.api.nvim_create_augroup("CallGraphAutoCommands", { clear = true })
+  
+  -- 注册缓冲区进入事件处理函数
+  local buffer_handler = Caller.create_buffer_enter_handler()
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = augroup,
+    pattern = "*",
+    callback = buffer_handler,
+    desc = "Update g_caller when switching to a known call graph buffer"
+  })
 end
 
 function M.setup(opts)
@@ -70,6 +101,7 @@ function M.setup(opts)
   -- setup logs
   log.setup({ append = false, level = M.opts.log_level })
   setup_hl()
+  setup_autocmds()
   create_user_cmd()
 end
 
