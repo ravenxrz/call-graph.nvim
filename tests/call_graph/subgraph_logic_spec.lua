@@ -136,29 +136,35 @@ describe("Subgraph Logic in call_graph.caller", function()
     table.insert(to_node.incoming_edges, edge)
     return edge
   end
-  
+
   -- 自定义断言辅助函数
   local function is_empty(tbl)
-    if type(tbl) ~= "table" then return false end
+    if type(tbl) ~= "table" then
+      return false
+    end
     return next(tbl) == nil
   end
-  
+
   -- 改进的深拷贝函数，避免循环引用导致堆栈溢出
   local function safe_deepcopy(orig, seen)
     seen = seen or {}
-    if type(orig) ~= 'table' then return orig end
-    if seen[orig] then return seen[orig] end
-    
+    if type(orig) ~= "table" then
+      return orig
+    end
+    if seen[orig] then
+      return seen[orig]
+    end
+
     local copy = {}
     seen[orig] = copy
-    
+
     for k, v in pairs(orig) do
-      copy[k] = (type(v) == 'table') and safe_deepcopy(v, seen) or v
+      copy[k] = (type(v) == "table") and safe_deepcopy(v, seen) or v
     end
-    
+
     return setmetatable(copy, getmetatable(orig))
   end
-  
+
   -- Load the functions to be tested (definitions pasted above for this example)
   -- In a real scenario, you might load them from the module if they are exposed for testing.
   local _G = _G -- Get global environment
@@ -180,10 +186,12 @@ describe("Subgraph Logic in call_graph.caller", function()
       nodes_map = { [n1.nodeid] = n1, [n2.nodeid] = n2, [n3.nodeid] = n3, [n4.nodeid] = n4 }
       edges_list = {}
       edge_id_counter = 1
-      
+
       -- n1 -> n2, n2 -> n3
-      table.insert(edges_list, create_edge(edge_id_counter, n1, n2)); edge_id_counter = edge_id_counter + 1
-      table.insert(edges_list, create_edge(edge_id_counter, n2, n3)); edge_id_counter = edge_id_counter + 1
+      table.insert(edges_list, create_edge(edge_id_counter, n1, n2))
+      edge_id_counter = edge_id_counter + 1
+      table.insert(edges_list, create_edge(edge_id_counter, n2, n3))
+      edge_id_counter = edge_id_counter + 1
     end)
 
     it("should return connected for empty selection", function()
@@ -193,44 +201,46 @@ describe("Subgraph Logic in call_graph.caller", function()
     end)
 
     it("should return connected for single node selection", function()
-      local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid})
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid })
       assert.is_true(result.is_connected)
     end)
 
     it("should identify connected nodes (n1, n2)", function()
-      local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid, n2.nodeid})
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid, n2.nodeid })
       assert.is_true(result.is_connected)
     end)
 
     it("should identify connected nodes (n1, n2, n3)", function()
-      local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid, n2.nodeid, n3.nodeid})
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid, n2.nodeid, n3.nodeid })
       assert.is_true(result.is_connected)
     end)
 
     it("should identify disconnected nodes (n1, n4)", function()
-      local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid, n4.nodeid})
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid, n4.nodeid })
       assert.is_false(result.is_connected)
-      assert.are.same({n4.nodeid}, result.disconnected_nodes) -- Assuming BFS starts from n1
+      assert.are.same({ n4.nodeid }, result.disconnected_nodes) -- Assuming BFS starts from n1
     end)
 
     it("should identify disconnected nodes (n1, n3) if n2 is not selected", function()
-        -- n1, n3 are connected via n2, but n2 is not in selected_node_ids
-      local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid, n3.nodeid})
+      -- n1, n3 are connected via n2, but n2 is not in selected_node_ids
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid, n3.nodeid })
       assert.is_false(result.is_connected)
       -- Depending on BFS start, either n1 or n3 will be disconnected from the other
       -- If BFS starts at n1, n3 is disconnected.
       local disconnected_map = {}
-      for _, id in ipairs(result.disconnected_nodes) do disconnected_map[id] = true end
+      for _, id in ipairs(result.disconnected_nodes) do
+        disconnected_map[id] = true
+      end
       assert.is_true(disconnected_map[n1.nodeid] or disconnected_map[n3.nodeid])
       assert.equals(1, #result.disconnected_nodes) -- Only one of them should be listed as disconnected relative to the component found from the start node.
     end)
-    
+
     it("should handle multiple disconnected components if selected (n1, n4, n2 but not n3)", function()
-        -- Graph: 1-2-3, 4. Selected: 1, 2, 4. Edges exist between 1 and 2. 4 is isolated.
-        local result = analyze_connectivity(nodes_map, edges_list, {n1.nodeid, n2.nodeid, n4.nodeid})
-        assert.is_false(result.is_connected)
-        -- If BFS starts from n1, it will find n2. n4 will be disconnected.
-        assert.are.same({n4.nodeid}, result.disconnected_nodes)
+      -- Graph: 1-2-3, 4. Selected: 1, 2, 4. Edges exist between 1 and 2. 4 is isolated.
+      local result = analyze_connectivity(nodes_map, edges_list, { n1.nodeid, n2.nodeid, n4.nodeid })
+      assert.is_false(result.is_connected)
+      -- If BFS starts from n1, it will find n2. n4 will be disconnected.
+      assert.are.same({ n4.nodeid }, result.disconnected_nodes)
     end)
   end)
 
@@ -244,7 +254,7 @@ describe("Subgraph Logic in call_graph.caller", function()
       -- Mock vim.deepcopy with our safe implementation
       _G.vim = _G.vim or {}
       _G.vim.deepcopy = safe_deepcopy
-      
+
       -- Mock vim.tbl_count for testing
       _G.vim.tbl_count = function(t)
         local count = 0
@@ -258,13 +268,16 @@ describe("Subgraph Logic in call_graph.caller", function()
       n2 = create_node(2, "Node2")
       n3 = create_node(3, "Node3")
       n4 = create_node(4, "Node4")
-      nodes_map = { [1]=n1, [2]=n2, [3]=n3, [4]=n4 }
+      nodes_map = { [1] = n1, [2] = n2, [3] = n3, [4] = n4 }
       edges_list = {}
       edge_id_counter = 1
-      
-      table.insert(edges_list, create_edge(edge_id_counter, n1, n2)); edge_id_counter = edge_id_counter + 1 -- e1
-      table.insert(edges_list, create_edge(edge_id_counter, n2, n3)); edge_id_counter = edge_id_counter + 1 -- e2
-      table.insert(edges_list, create_edge(edge_id_counter, n1, n3)); edge_id_counter = edge_id_counter + 1 -- e3 (direct n1->n3)
+
+      table.insert(edges_list, create_edge(edge_id_counter, n1, n2))
+      edge_id_counter = edge_id_counter + 1 -- e1
+      table.insert(edges_list, create_edge(edge_id_counter, n2, n3))
+      edge_id_counter = edge_id_counter + 1 -- e2
+      table.insert(edges_list, create_edge(edge_id_counter, n1, n3))
+      edge_id_counter = edge_id_counter + 1 -- e3 (direct n1->n3)
     end)
 
     it("should return empty graph for no selected nodes", function()
@@ -275,7 +288,7 @@ describe("Subgraph Logic in call_graph.caller", function()
     end)
 
     it("should generate subgraph with a single node", function()
-      local subgraph = generate_subgraph(nodes_map, edges_list, {n1.nodeid})
+      local subgraph = generate_subgraph(nodes_map, edges_list, { n1.nodeid })
       assert.are.equal(n1.text, subgraph.root_node.text)
       assert.are.equal(1, vim.tbl_count(subgraph.nodes))
       assert.is_not_nil(subgraph.nodes[n1.nodeid])
@@ -286,9 +299,9 @@ describe("Subgraph Logic in call_graph.caller", function()
     end)
 
     it("should generate subgraph with two connected nodes (n1, n2)", function()
-      local selected_ids = {n1.nodeid, n2.nodeid}
+      local selected_ids = { n1.nodeid, n2.nodeid }
       local subgraph = generate_subgraph(nodes_map, edges_list, selected_ids)
-      
+
       assert.are.equal(n1.text, subgraph.root_node.text)
       assert.are.equal(2, vim.tbl_count(subgraph.nodes))
       assert.is_not_nil(subgraph.nodes[n1.nodeid])
@@ -301,7 +314,7 @@ describe("Subgraph Logic in call_graph.caller", function()
 
       assert.are.equal(sub_n1, sub_edge.from_node)
       assert.are.equal(sub_n2, sub_edge.to_node)
-      
+
       assert.are.equal(1, #sub_n1.outcoming_edges)
       assert.are.same(sub_edge, sub_n1.outcoming_edges[1])
       assert.equals(0, #sub_n1.incoming_edges)
@@ -312,9 +325,9 @@ describe("Subgraph Logic in call_graph.caller", function()
     end)
 
     it("should generate subgraph with (n1, n2, n3) and all relevant edges", function()
-      local selected_ids = {n1.nodeid, n2.nodeid, n3.nodeid}
+      local selected_ids = { n1.nodeid, n2.nodeid, n3.nodeid }
       local subgraph = generate_subgraph(nodes_map, edges_list, selected_ids)
-      
+
       assert.are.equal(n1.text, subgraph.root_node.text)
       assert.are.equal(3, vim.tbl_count(subgraph.nodes))
       assert.are.equal(3, #subgraph.edges) -- n1->n2, n2->n3, n1->n3
@@ -328,7 +341,7 @@ describe("Subgraph Logic in call_graph.caller", function()
         assert.is_true(subgraph.nodes[edge.from_node.nodeid] == edge.from_node)
         assert.is_true(subgraph.nodes[edge.to_node.nodeid] == edge.to_node)
       end
-      
+
       -- Check n1 (out: n2, n3)
       assert.are.equal(2, #sub_n1.outcoming_edges)
       assert.equals(0, #sub_n1.incoming_edges)
@@ -343,15 +356,14 @@ describe("Subgraph Logic in call_graph.caller", function()
       assert.are.equal(2, #sub_n3.incoming_edges)
       assert.equals(0, #sub_n3.outcoming_edges)
     end)
-    
+
     it("should not include edges to non-selected nodes", function()
       -- Original: n1 -> n2. Selected: {n1}.
-      local selected_ids = {n1.nodeid}
+      local selected_ids = { n1.nodeid }
       local subgraph = generate_subgraph(nodes_map, edges_list, selected_ids)
       assert.are.equal(1, vim.tbl_count(subgraph.nodes))
       assert.equals(0, #subgraph.edges)
       assert.equals(0, #subgraph.nodes[n1.nodeid].outcoming_edges)
     end)
-
   end)
-end) 
+end)

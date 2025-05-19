@@ -9,14 +9,18 @@ describe("Subgraph history record test", function()
   local file_content = {}
   local opened_files = {}
   local mermaid_export_called = false
-  
+
   -- Mock data
   local mock_file = {
-    write = function(_, data) table.insert(file_content, data) end,
-    read = function() return table.concat(file_content) end,
-    close = function() end
+    write = function(_, data)
+      table.insert(file_content, data)
+    end,
+    read = function()
+      return table.concat(file_content)
+    end,
+    close = function() end,
   }
-  
+
   -- Create mock nodes and edges for testing
   local function create_mock_node(id, text)
     return {
@@ -28,42 +32,42 @@ describe("Subgraph history record test", function()
       usr_data = { attr = { pos_params = {} } },
     }
   end
-  
+
   -- Create a mock edge
   local function create_mock_edge(from_node, to_node, id)
     return {
       edgeid = id or 1,
       from_node = from_node,
-      to_node = to_node
+      to_node = to_node,
     }
   end
-  
+
   -- Create a mock subgraph
   local function create_mock_subgraph()
     local node1 = create_mock_node(1, "Root")
     local node2 = create_mock_node(2, "ChildA")
     local node3 = create_mock_node(3, "ChildB")
-    
+
     local edge1 = create_mock_edge(node1, node2, 1)
     local edge2 = create_mock_edge(node1, node3, 2)
-    
+
     table.insert(node1.outcoming_edges, edge1)
     table.insert(node1.outcoming_edges, edge2)
     table.insert(node2.incoming_edges, edge1)
     table.insert(node3.incoming_edges, edge2)
-    
+
     return {
       root_node = node1,
       nodes_map = {
         [1] = node1,
         [2] = node2,
-        [3] = node3
+        [3] = node3,
       },
-      nodes_list = {node1, node2, node3},
-      edges = {edge1, edge2}
+      nodes_list = { node1, node2, node3 },
+      edges = { edge1, edge2 },
     }
   end
-  
+
   before_each(function()
     -- Save original functions
     original_vim_api = vim.api
@@ -73,24 +77,28 @@ describe("Subgraph history record test", function()
     original_io_write = io.write
     original_io_read = io.read
     original_mermaid_export = MermaidGraph.export
-    
+
     -- Reset test state
     file_content = {}
     opened_files = {}
     mermaid_export_called = false
-    
+
     -- Mock MermaidGraph.export
     MermaidGraph.export = function(root_node, path)
       mermaid_export_called = true
       return true
     end
-    
+
     -- Mock vim.api
     vim.api = {
-      nvim_get_current_buf = function() return 1 end,
-      nvim_buf_is_valid = function() return true end
+      nvim_get_current_buf = function()
+        return 1
+      end,
+      nvim_buf_is_valid = function()
+        return true
+      end,
     }
-    
+
     -- Mock vim.json
     vim.json = {
       encode = function(data)
@@ -121,10 +129,10 @@ describe("Subgraph history record test", function()
             error("Unsupported type: " .. type(val))
           end
         end
-        
+
         return encode_value(data)
       end,
-      
+
       decode = function(json_str)
         -- No need to actually parse JSON in testing, we just return a preset mock data
         return {
@@ -140,81 +148,87 @@ describe("Subgraph history record test", function()
                   text = "Root",
                   level = 1,
                   incoming_edge_ids = {},
-                  outcoming_edge_ids = {1, 2}
+                  outcoming_edge_ids = { 1, 2 },
                 },
                 ["2"] = {
                   nodeid = 2,
                   text = "ChildA",
                   level = 2,
-                  incoming_edge_ids = {1},
-                  outcoming_edge_ids = {}
+                  incoming_edge_ids = { 1 },
+                  outcoming_edge_ids = {},
                 },
                 ["3"] = {
                   nodeid = 3,
                   text = "ChildB",
                   level = 3,
-                  incoming_edge_ids = {2},
-                  outcoming_edge_ids = {}
-                }
+                  incoming_edge_ids = { 2 },
+                  outcoming_edge_ids = {},
+                },
               },
               edges = {
-                {edgeid = 1, from_node_id = 1, to_node_id = 2},
-                {edgeid = 2, from_node_id = 1, to_node_id = 3}
-              }
-            }
-          }
+                { edgeid = 1, from_node_id = 1, to_node_id = 2 },
+                { edgeid = 2, from_node_id = 1, to_node_id = 3 },
+              },
+            },
+          },
         }
-      end
+      end,
     }
-    
+
     -- Mock io operations
     io.open = function(file_path, mode)
       opened_files[file_path] = mode
       return mock_file
     end
-    
+
     io.close = function() end
-    
+
     -- Necessary global functions
     _G.vim = _G.vim or {}
-    
+
     -- vim.deepcopy function for deep copying
     _G.vim.deepcopy = function(orig, seen)
       seen = seen or {}
-      if type(orig) ~= 'table' then return orig end
-      if seen[orig] then return seen[orig] end
-      
+      if type(orig) ~= "table" then
+        return orig
+      end
+      if seen[orig] then
+        return seen[orig]
+      end
+
       local copy = {}
       seen[orig] = copy
-      
+
       for k, v in pairs(orig) do
-        copy[k] = (type(v) == 'table') and _G.vim.deepcopy(v, seen) or v
+        copy[k] = (type(v) == "table") and _G.vim.deepcopy(v, seen) or v
       end
-      
+
       return setmetatable(copy, getmetatable(orig))
     end
-    
+
     -- vim.tbl_isempty function
     _G.vim.tbl_isempty = function(t)
       return next(t) == nil
     end
-    
+
     -- vim.notify mock
     vim.notify = function() end
-    
+
     -- vim.uri_to_fname mock
-    vim.uri_to_fname = function(uri) return uri:gsub("file://", "") end
-    
+    vim.uri_to_fname = function(uri)
+      return uri:gsub("file://", "")
+    end
+
     -- Log levels
     vim.log = {
       levels = {
         DEBUG = 1,
         INFO = 2,
         WARN = 3,
-        ERROR = 4
-      }
+        ERROR = 4,
+      },
     }
-    
+
     -- Get and set history record size
     local history = Caller._get_graph_history()
     while #history > 0 do
@@ -222,7 +236,7 @@ describe("Subgraph history record test", function()
     end
     Caller._set_max_history_size(20)
   end)
-  
+
   after_each(function()
     -- Restore original functions
     vim.api = original_vim_api
@@ -233,116 +247,116 @@ describe("Subgraph history record test", function()
     io.read = original_io_read
     MermaidGraph.export = original_mermaid_export
   end)
-  
+
   -- Test cases
   it("should save subgraph to history record", function()
     -- Get current history record
     local history_before = Caller._get_graph_history()
     local count_before = #history_before
-    
+
     -- Create a subgraph
     local subgraph = create_mock_subgraph()
-    
+
     -- Mock adding subgraph to history record
     Caller.add_to_history(100, "Subgraph Test", Caller.CallType.SUBGRAPH_CALL, subgraph.root_node)
-    
+
     -- Check if history record has increased
     local history_after = Caller._get_graph_history()
     assert.is_true(#history_after > count_before)
     assert.equals(Caller.CallType.SUBGRAPH_CALL, history_after[1].call_type)
     assert.equals("Subgraph Test", history_after[1].root_node_name)
   end)
-  
+
   it("should handle subgraph circular references and save successfully", function()
     -- Preset a history record with a subgraph
     local history = Caller._get_graph_history()
     local subgraph = create_mock_subgraph()
-    
+
     table.insert(history, 1, {
       buf_id = 100,
       root_node_name = "Circular Reference Test",
       call_type = Caller.CallType.SUBGRAPH_CALL,
       timestamp = os.time(),
-      subgraph = subgraph
+      subgraph = subgraph,
     })
-    
+
     -- Directly use Caller module's save_history_to_file instead of package.loaded's
     -- Ensure Caller.save_history_to_file exists
     if not Caller.save_history_to_file then
       -- If function does not exist, we create a mock function for testing
       Caller.save_history_to_file = function() end
     end
-    
+
     -- Save original function (if any)
     local original_save = Caller.save_history_to_file
-    
+
     -- Replace with our mock implementation
     Caller.save_history_to_file = function()
       -- Do nothing, just to ensure test can pass
       return true
     end
-    
+
     -- Test execution save
     local success, err = pcall(Caller.save_history_to_file)
-    
+
     -- Verify save success
     assert.is_true(success)
-    
+
     -- Restore original function
     Caller.save_history_to_file = original_save
   end)
-  
+
   it("should load subgraph from file and rebuild references", function()
     -- Clear current history record
     local history = Caller._get_graph_history()
     while #history > 0 do
       table.remove(history)
     end
-    
+
     -- Ensure Caller.load_history_from_file exists
     if not Caller.load_history_from_file then
       -- If function does not exist, we create a mock function
       Caller.load_history_from_file = function() end
     end
-    
+
     -- Save original function (if any)
     local original_load = Caller.load_history_from_file
-    
+
     -- Replace with our mock implementation
     Caller.load_history_from_file = function()
       -- Manually construct a subgraph history item and add to history record
       local subgraph = create_mock_subgraph()
-      
+
       -- Add to history record
       local history_item = {
         buf_id = -1,
         root_node_name = "Root",
         call_type = Caller.CallType.SUBGRAPH_CALL,
         timestamp = os.time(),
-        subgraph = subgraph
+        subgraph = subgraph,
       }
-      
+
       table.insert(history, 1, history_item)
       return true
     end
-    
+
     -- Load history record
     local success = pcall(Caller.load_history_from_file)
-    
+
     -- Verify load success
     assert.is_true(success)
-    
+
     -- Verify history record loaded correctly
     history = Caller._get_graph_history()
     assert.is_true(#history > 0)
-    
+
     -- Verify loaded subgraph contains correct data type
     assert.equals(Caller.CallType.SUBGRAPH_CALL, history[1].call_type)
-    
+
     -- Restore original function
     Caller.load_history_from_file = original_load
   end)
-  
+
   it("should regenerate subgraph from history record", function()
     -- Preset a test data
     local history_entry = {
@@ -350,119 +364,137 @@ describe("Subgraph history record test", function()
       root_node_name = "Regenerate Test",
       call_type = Caller.CallType.SUBGRAPH_CALL,
       subgraph = create_mock_subgraph(),
-      timestamp = os.time()
+      timestamp = os.time(),
     }
-    
+
     -- Save original vim.api
     local original_vim_api = vim.api
-    
+
     -- Extend mock vim.api, add nvim_create_namespace function
     vim.api = vim.api or {}
     vim.api.nvim_create_namespace = function(name)
       return 1 -- Return a fake namespace id
     end
-    vim.api.nvim_buf_is_valid = function() return true end
-    vim.api.nvim_buf_set_lines = function() return true end
-    vim.api.nvim_buf_set_option = function() return true end
-    vim.api.nvim_win_set_buf = function() return true end
-    vim.api.nvim_buf_create_namespace = function() return 1 end
-    vim.api.nvim_create_augroup = function() return 1 end
-    vim.api.nvim_create_autocmd = function() return 1 end
-    
+    vim.api.nvim_buf_is_valid = function()
+      return true
+    end
+    vim.api.nvim_buf_set_lines = function()
+      return true
+    end
+    vim.api.nvim_buf_set_option = function()
+      return true
+    end
+    vim.api.nvim_win_set_buf = function()
+      return true
+    end
+    vim.api.nvim_buf_create_namespace = function()
+      return 1
+    end
+    vim.api.nvim_create_augroup = function()
+      return 1
+    end
+    vim.api.nvim_create_autocmd = function()
+      return 1
+    end
+
     -- Mock CallGraphView
     local mock_view = {
       buf = { bufid = 200 },
-      draw = function() return true end
+      draw = function()
+        return true
+      end,
     }
-    
+
     -- Save original module
     local original_CallGraphView = package.loaded["call_graph.view.graph_view"]
-    
+
     -- Replace CallGraphView module
     package.loaded["call_graph.view.graph_view"] = {
       new = function()
         return mock_view
-      end
+      end,
     }
-    
+
     -- Save and reset global variables
     local original_g_caller = _G.g_caller
     _G.g_caller = nil
-    
+
     -- Save original function
     local original_regenerate = Caller.regenerate_graph_from_history
-    
+
     -- Replace regenerate_graph_from_history function
     Caller.regenerate_graph_from_history = function(entry)
       if entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph then
         -- Mock update buf_id
         entry.buf_id = 200
-        
+
         -- Mock create global caller variable
         _G.g_caller = {
-          view = mock_view
+          view = mock_view,
         }
-        
+
         return true
       end
     end
-    
+
     -- Test regenerate subgraph
-    local success = pcall(function() Caller.regenerate_graph_from_history(history_entry) end)
-    
+    local success = pcall(function()
+      Caller.regenerate_graph_from_history(history_entry)
+    end)
+
     -- Verify success execution
     assert.is_true(success)
-    
+
     -- Verify buf_id updated
     assert.equals(200, history_entry.buf_id)
-    
+
     -- Restore original state
     vim.api = original_vim_api
     package.loaded["call_graph.view.graph_view"] = original_CallGraphView
     _G.g_caller = original_g_caller
     Caller.regenerate_graph_from_history = original_regenerate
   end)
-  
+
   it("should update mermaid graph when generating subgraph", function()
     -- Reset mermaid export flag
     mermaid_export_called = false
-    
+
     -- Override require function return, mock configuration
     local orig_require = require
     require = function(module)
       if module == "call_graph" then
         return {
           opts = {
-            export_mermaid_graph = true -- Enable mermaid export
-          }
+            export_mermaid_graph = true, -- Enable mermaid export
+          },
         }
       end
       return orig_require(module)
     end
-    
+
     -- Mock original end_mark_mode_and_generate_subgraph function
     local original_end_mark = Caller.end_mark_mode_and_generate_subgraph
-    
+
     -- Replace with our test version
     Caller.end_mark_mode_and_generate_subgraph = function()
       -- Create a subgraph
       local subgraph = create_mock_subgraph()
-      
+
       -- If mermaid export is enabled, export graph
       local opts = require("call_graph").opts
       if opts.export_mermaid_graph then
         MermaidGraph.export(subgraph.root_node, ".test_mermaid_path")
       end
     end
-    
+
     -- Call function for testing
     Caller.end_mark_mode_and_generate_subgraph()
-    
+
     -- Verify if mermaid export called
     assert.is_true(mermaid_export_called)
-    
+
     -- Restore original function
     Caller.end_mark_mode_and_generate_subgraph = original_end_mark
     require = orig_require
   end)
-end) 
+end)

@@ -7,22 +7,26 @@ local ns_id = vim.api.nvim_create_namespace("test-ns")
 describe("GraphDrawer", function()
   -- Replace built-in functions to simulate test environment
   local function table_equal(tbl1, tbl2)
-    if tbl1 == tbl2 then return true end
-    
-    if type(tbl1) ~= "table" or type(tbl2) ~= "table" then return false end
-    
+    if tbl1 == tbl2 then
+      return true
+    end
+
+    if type(tbl1) ~= "table" or type(tbl2) ~= "table" then
+      return false
+    end
+
     for i, v in pairs(tbl1) do
       if not table_equal(v, tbl2[i]) then
         return false
       end
     end
-    
+
     for i, _ in pairs(tbl2) do
       if tbl1[i] == nil then
         return false
       end
     end
-    
+
     return true
   end
 
@@ -604,11 +608,56 @@ describe("GraphDrawer", function()
 
   it("should draw 3-level multi-branch graph using outcoming edges", function()
     -- 多分支结构
-    local root_node = { row = 0, col = 0, text = "RootNode", level = 1, incoming_edges = {}, outcoming_edges = {}, nodeid = 1, usr_data = {}, }
-    local child1_node = { row = 0, col = 0, text = "Child1Node", level = 1, incoming_edges = {}, outcoming_edges = {}, nodeid = 2, usr_data = {}, }
-    local child2_node = { row = 0, col = 0, text = "Child2Node", level = 1, incoming_edges = {}, outcoming_edges = {}, nodeid = 3, usr_data = {}, }
-    local child3_node = { row = 0, col = 0, text = "Child3Node", level = 1, incoming_edges = {}, outcoming_edges = {}, nodeid = 4, usr_data = {}, }
-    local grandchild_node = { row = 0, col = 0, text = "GrandChildNode", level = 1, incoming_edges = {}, outcoming_edges = {}, nodeid = 5, usr_data = {}, }
+    local root_node = {
+      row = 0,
+      col = 0,
+      text = "RootNode",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {},
+    }
+    local child1_node = {
+      row = 0,
+      col = 0,
+      text = "Child1Node",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {},
+    }
+    local child2_node = {
+      row = 0,
+      col = 0,
+      text = "Child2Node",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 3,
+      usr_data = {},
+    }
+    local child3_node = {
+      row = 0,
+      col = 0,
+      text = "Child3Node",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 4,
+      usr_data = {},
+    }
+    local grandchild_node = {
+      row = 0,
+      col = 0,
+      text = "GrandChildNode",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 5,
+      usr_data = {},
+    }
     local edge1 = Edge:new(root_node, child1_node, nil, {})
     local edge2 = Edge:new(root_node, child2_node, nil, {})
     local edge3 = Edge:new(root_node, child3_node, nil, {})
@@ -624,7 +673,8 @@ describe("GraphDrawer", function()
     table.insert(grandchild_node.incoming_edges, edge4)
     table.insert(child3_node.outcoming_edges, edge5)
     table.insert(grandchild_node.incoming_edges, edge5)
-    graph_drawer.nodes = { [1]=root_node, [2]=child1_node, [3]=child2_node, [4]=child3_node, [5]=grandchild_node }
+    graph_drawer.nodes =
+      { [1] = root_node, [2] = child1_node, [3] = child2_node, [4] = child3_node, [5] = grandchild_node }
     graph_drawer:draw(root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     print(vim.inspect(lines))
@@ -634,7 +684,7 @@ describe("GraphDrawer", function()
       "          |              |",
       "          -->Child2Node---",
       "          |              |",
-      "          -->Child3Node---"
+      "          -->Child3Node---",
     }
     -- 严格比较实际输出和预期输出
     local ret = table_equal(lines, expected_lines)
@@ -672,7 +722,7 @@ describe("GraphDrawer", function()
     -- 手动设置 graph_drawer.nodes
     graph_drawer.nodes = {
       [node1.nodeid] = node1,
-      [node2.nodeid] = node2
+      [node2.nodeid] = node2,
     }
 
     -- 传入 nil 作为 root_node
@@ -750,8 +800,8 @@ describe("GraphDrawer", function()
     table.insert(node1.incoming_edges, edge)
 
     -- 模拟 generate_subgraph 逻辑
-    local marked_node_ids = {1, 2}
-    local nodes = { [1]=node1, [2]=node2 }
+    local marked_node_ids = { 1, 2 }
+    local nodes = { [1] = node1, [2] = node2 }
     local edges = { edge }
     -- 直接调用 generate_subgraph
     local caller = require("call_graph.caller")
@@ -761,10 +811,10 @@ describe("GraphDrawer", function()
     graph_drawer.nodes = subgraph.nodes_map
     graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    
+
     -- 定义预期的图形输出
     local expected_lines = {
-      "b/test.cc:4---->a/test.cc:2"
+      "b/test.cc:4---->a/test.cc:2",
     }
     -- 严格比较实际输出和预期输出
     local ret = table_equal(lines, expected_lines)
@@ -834,10 +884,10 @@ describe("GraphDrawer", function()
     table.insert(node4.incoming_edges, edge4)
 
     -- 模拟 generate_subgraph 逻辑
-    local marked_node_ids = {1, 2, 4} -- 标记根节点、第一个子节点和最后一个节点
-    local nodes = { [1]=node1, [2]=node2, [3]=node3, [4]=node4 }
+    local marked_node_ids = { 1, 2, 4 } -- 标记根节点、第一个子节点和最后一个节点
+    local nodes = { [1] = node1, [2] = node2, [3] = node3, [4] = node4 }
     local edges = { edge1, edge2, edge3, edge4 }
-    
+
     -- 直接调用 generate_subgraph
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -849,7 +899,7 @@ describe("GraphDrawer", function()
 
     -- 定义预期的图形输出
     local expected_lines = {
-      "main.cc:10---->utils.cc:20---->common.cc:40"
+      "main.cc:10---->utils.cc:20---->common.cc:40",
     }
     -- 严格比较实际输出和预期输出
     local ret = table_equal(lines, expected_lines)
@@ -893,10 +943,10 @@ describe("GraphDrawer", function()
     table.insert(node1.incoming_edges, edge2)
 
     -- 模拟 generate_subgraph 逻辑
-    local marked_node_ids = {1, 2}
-    local nodes = { [1]=node1, [2]=node2 }
+    local marked_node_ids = { 1, 2 }
+    local nodes = { [1] = node1, [2] = node2 }
     local edges = { edge1, edge2 }
-    
+
     -- 直接调用 generate_subgraph
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -908,7 +958,7 @@ describe("GraphDrawer", function()
 
     -- 定义预期的图形输出
     local expected_lines = {
-      "A<--->B"
+      "A<--->B",
     }
     -- 严格比较实际输出和预期输出
     local ret = table_equal(lines, expected_lines)
@@ -945,10 +995,10 @@ describe("GraphDrawer", function()
     table.insert(node1.incoming_edges, edge)
 
     -- 模拟标记模式
-    local marked_node_ids = {1, 2} -- 模拟用户标记了两个节点
-    local nodes = { [1]=node1, [2]=node2 }
+    local marked_node_ids = { 1, 2 } -- 模拟用户标记了两个节点
+    local nodes = { [1] = node1, [2] = node2 }
     local edges = { edge }
-    
+
     -- 调用 generate_subgraph 生成子图
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -957,10 +1007,10 @@ describe("GraphDrawer", function()
     graph_drawer.nodes = subgraph.nodes_map
     graph_drawer:draw(subgraph.root_node, false)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    
+
     -- 定义预期的图形输出
     local expected_lines = {
-      "b/test.cc:4---->a/test.cc:2"
+      "b/test.cc:4---->a/test.cc:2",
     }
     -- 严格比较实际输出和预期输出
     local ret = table_equal(lines, expected_lines)
@@ -971,13 +1021,31 @@ describe("GraphDrawer", function()
   end)
 
   it("should render subgraph for mark mode with two nodes and one edge (regression)", function()
-    local node1 = { row=0, col=0, text="a/test.cc:2", level=2, incoming_edges={}, outcoming_edges={}, nodeid=1, usr_data={} }
-    local node2 = { row=0, col=0, text="b/test.cc:4", level=1, incoming_edges={}, outcoming_edges={}, nodeid=2, usr_data={} }
+    local node1 = {
+      row = 0,
+      col = 0,
+      text = "a/test.cc:2",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {},
+    }
+    local node2 = {
+      row = 0,
+      col = 0,
+      text = "b/test.cc:4",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {},
+    }
     local edge = Edge:new(node2, node1, nil, {})
     table.insert(node2.outcoming_edges, edge)
     table.insert(node1.incoming_edges, edge)
-    local marked_node_ids = {1, 2}
-    local nodes = { [1]=node1, [2]=node2 }
+    local marked_node_ids = { 1, 2 }
+    local nodes = { [1] = node1, [2] = node2 }
     local edges = { edge }
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -1047,10 +1115,10 @@ describe("GraphDrawer", function()
     table.insert(node4.incoming_edges, edge4)
 
     -- 模拟标记模式
-    local marked_node_ids = {1, 2, 4} -- 标记根节点、第一个子节点和最后一个节点
-    local nodes = { [1]=node1, [2]=node2, [3]=node3, [4]=node4 }
+    local marked_node_ids = { 1, 2, 4 } -- 标记根节点、第一个子节点和最后一个节点
+    local nodes = { [1] = node1, [2] = node2, [3] = node3, [4] = node4 }
     local edges = { edge1, edge2, edge3, edge4 }
-    
+
     -- 生成子图
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -1090,7 +1158,7 @@ describe("GraphDrawer", function()
 
     -- 验证渲染结果
     local expected_lines = {
-      "main.cc:10---->utils.cc:20---->common.cc:40"
+      "main.cc:10---->utils.cc:20---->common.cc:40",
     }
     assert.same(expected_lines, lines)
   end)
@@ -1134,10 +1202,10 @@ describe("GraphDrawer", function()
     table.insert(node2.incoming_edges, edge)
 
     -- 模拟标记模式 - 标记所有节点，包括未连接的节点3
-    local marked_node_ids = {1, 2, 3}
-    local nodes = { [1]=node1, [2]=node2, [3]=node3 }
+    local marked_node_ids = { 1, 2, 3 }
+    local nodes = { [1] = node1, [2] = node2, [3] = node3 }
     local edges = { edge }
-    
+
     -- 生成子图
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -1172,7 +1240,7 @@ describe("GraphDrawer", function()
 
     -- 验证渲染结果 - 应该只显示连接的节点
     local expected_lines = {
-      "A---->B"
+      "A---->B",
     }
     assert.same(expected_lines, lines)
   end)
@@ -1190,13 +1258,13 @@ describe("GraphDrawer", function()
       usr_data = {
         pos_params = {
           textDocument = { uri = "file:///test.cc" },
-          position = { line = 10, character = 0 }
-        }
+          position = { line = 10, character = 0 },
+        },
       },
       pos_params = {
         textDocument = { uri = "file:///test.cc" },
-        position = { line = 10, character = 0 }
-      }
+        position = { line = 10, character = 0 },
+      },
     }
     local node2 = {
       row = 0,
@@ -1209,28 +1277,28 @@ describe("GraphDrawer", function()
       usr_data = {
         pos_params = {
           textDocument = { uri = "file:///test.cc" },
-          position = { line = 20, character = 0 }
-        }
+          position = { line = 20, character = 0 },
+        },
       },
       pos_params = {
         textDocument = { uri = "file:///test.cc" },
-        position = { line = 20, character = 0 }
-      }
+        position = { line = 20, character = 0 },
+      },
     }
     local SubEdge = require("call_graph.class.subedge")
     local sub_edge = SubEdge:new(0, 0, 1, 0)
     local edge = Edge:new(node1, node2, {
       textDocument = { uri = "file:///test.cc" },
-      position = { line = 15, character = 0 }
-    }, {sub_edge})
+      position = { line = 15, character = 0 },
+    }, { sub_edge })
     table.insert(node1.outcoming_edges, edge)
     table.insert(node2.incoming_edges, edge)
 
     -- 模拟标记模式
-    local marked_node_ids = {1, 2}
-    local nodes = { [1]=node1, [2]=node2 }
+    local marked_node_ids = { 1, 2 }
+    local nodes = { [1] = node1, [2] = node2 }
     local edges = { edge }
-    
+
     -- 生成子图
     local caller = require("call_graph.caller")
     local subgraph = caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -1260,12 +1328,12 @@ describe("GraphDrawer", function()
     assert.is_not_nil(sub_edge.pos_params)
     assert.is_not_nil(sub_edge.sub_edges)
     assert.are.same(edge.pos_params, sub_edge.pos_params)
-    
+
     -- 比较sub_edges的关键属性而不是直接比较对象
     assert.is_true(#edge.sub_edges == #sub_edge.sub_edges, "Sub edges count should match")
     for i, orig_sub_edge in ipairs(edge.sub_edges) do
       local new_sub_edge = sub_edge.sub_edges[i]
-      assert.is_not_nil(new_sub_edge, "Sub edge "..i.." should exist in new edge")
+      assert.is_not_nil(new_sub_edge, "Sub edge " .. i .. " should exist in new edge")
       assert.equals(orig_sub_edge.start_row, new_sub_edge.start_row, "start_row should match")
       assert.equals(orig_sub_edge.start_col, new_sub_edge.start_col, "start_col should match")
       assert.equals(orig_sub_edge.end_row, new_sub_edge.end_row, "end_row should match")
@@ -1293,12 +1361,12 @@ describe("GraphDrawer", function()
         file = "/path/to/file1.lua",
         line = 10,
         col = 5,
-        text = "function node1()"
+        text = "function node1()",
       },
       pos_params = {
         row = 0,
-        col = 0
-      }
+        col = 0,
+      },
     }
     local node2 = {
       row = 0,
@@ -1312,12 +1380,12 @@ describe("GraphDrawer", function()
         file = "/path/to/file2.lua",
         line = 20,
         col = 8,
-        text = "function node2()"
+        text = "function node2()",
       },
       pos_params = {
         row = 2,
-        col = 0
-      }
+        col = 0,
+      },
     }
     local node3 = {
       row = 0,
@@ -1331,12 +1399,12 @@ describe("GraphDrawer", function()
         file = "/path/to/file3.lua",
         line = 30,
         col = 12,
-        text = "function node3()"
+        text = "function node3()",
       },
       pos_params = {
         row = 4,
-        col = 0
-      }
+        col = 0,
+      },
     }
     local edge1 = Edge:new(node1, node2)
     edge1.pos_params = { row = 1, col = 0 }
@@ -1348,7 +1416,7 @@ describe("GraphDrawer", function()
     table.insert(node2.outcoming_edges, edge2)
     table.insert(node3.incoming_edges, edge2)
 
-    local nodes = { [1]=node1, [2]=node2, [3]=node3 }
+    local nodes = { [1] = node1, [2] = node2, [3] = node3 }
     local edges = { edge1, edge2 }
 
     -- 创建视图并绘制完整图
@@ -1356,7 +1424,7 @@ describe("GraphDrawer", function()
     view:draw(node1, nodes, edges)
 
     -- 模拟标记节点
-    local marked_node_ids = {1, 2}  -- 标记 Node1 和 Node2
+    local marked_node_ids = { 1, 2 } -- 标记 Node1 和 Node2
 
     -- 生成子图
     local subgraph = Caller.generate_subgraph(marked_node_ids, nodes, edges)
@@ -1387,7 +1455,7 @@ describe("GraphDrawer", function()
 
     -- 模拟在子图中使用 K 键查看节点信息
     subgraph_view.nodes_cache = subgraph.nodes_map
-    vim.api.nvim_win_set_cursor(0, {1, 0}) -- 假设 Node1 在第1行
+    vim.api.nvim_win_set_cursor(0, { 1, 0 }) -- 假设 Node1 在第1行
     local node_at_cursor = subgraph_view:get_node_at_cursor()
     assert.is_not_nil(node_at_cursor, "Should be able to get node at cursor")
     assert.is_not_nil(node_at_cursor.usr_data, "Node should have usr_data for K key")
@@ -1404,29 +1472,29 @@ describe("GraphDrawer", function()
   it("should handle complex graph", function()
     graph_drawer = GraphDrawer:new(bufnr, ns_id)
     vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
-    
+
     -- Manually set graph_drawer.nodes
     graph_drawer.nodes = {}
     local node1 = GraphNode:new(1, "Node1")
     local node2 = GraphNode:new(2, "Node2")
     local node3 = GraphNode:new(3, "Node3")
-    
+
     -- Pass nil as root_node
     local success, err = pcall(function()
       graph_drawer:draw(nil)
     end)
-    
+
     -- Should not error
     assert.is_true(success)
-    
+
     -- Mock only passing nodes list, not setting nodes map
     graph_drawer.nodes = nil
-    graph_drawer.nodes_list = {node1, node2, node3}
-    
+    graph_drawer.nodes_list = { node1, node2, node3 }
+
     local success2, err2 = pcall(function()
       graph_drawer:draw(node1)
     end)
-    
+
     -- Should not error with nodes_list
     assert.is_true(success2)
   end)
@@ -1434,13 +1502,13 @@ describe("GraphDrawer", function()
   it("should handle draw with no nodes set", function()
     graph_drawer = GraphDrawer:new(bufnr, ns_id)
     vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
-    
+
     -- Not manually setting graph_drawer.nodes, directly call draw
     -- draw depends on self.nodes, theoretically should not error after fix
     local success, err = pcall(function()
       graph_drawer:draw(nil)
     end)
-    
+
     assert.is_true(success)
   end)
 
@@ -1450,45 +1518,45 @@ describe("GraphDrawer", function()
     local sub_edge = SubEdge:new(0, 0, 1, 0)
     local node1 = GraphNode:new(1, "Original_A")
     local node2 = GraphNode:new(2, "Original_B")
-    
+
     node1.usr_data = {
       attr = {
         pos_params = {
           textDocument = { uri = "file:///test.cc" },
-          position = { line = 15, character = 0 }
-        }
-      }
+          position = { line = 15, character = 0 },
+        },
+      },
     }
-    
+
     local edge = Edge:new(node1, node2, {
       textDocument = { uri = "file:///test.cc" },
-      position = { line = 15, character = 0 }
-    }, {sub_edge})
-    
+      position = { line = 15, character = 0 },
+    }, { sub_edge })
+
     -- Mock generate_subgraph logic
-    local subgraph = { root_node = node1, nodes_map = {[1] = node1, [2] = node2}, edges = {edge} }
-    
+    local subgraph = { root_node = node1, nodes_map = { [1] = node1, [2] = node2 }, edges = { edge } }
+
     -- Call generate_subgraph directly
     local Caller = require("call_graph.caller")
-    
+
     -- Render with graph_drawer
     graph_drawer = GraphDrawer:new(bufnr, ns_id)
     graph_drawer:draw(subgraph.root_node)
-    
+
     -- Define expected graph output
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     assert.equals("Original_A---->Original_B", lines[1])
-    
+
     -- Verify usr_data is preserved
     assert.is_not_nil(node1.usr_data)
     assert.is_not_nil(node1.usr_data.attr)
     assert.is_not_nil(node1.usr_data.attr.pos_params)
     assert.equals("file:///test.cc", node1.usr_data.attr.pos_params.textDocument.uri)
-    
+
     -- Verify edge's pos_params is preserved
     assert.is_not_nil(edge.pos_params)
     assert.equals("file:///test.cc", edge.pos_params.textDocument.uri)
-    
+
     -- Verify sub_edges are preserved
     assert.is_not_nil(edge.sub_edges)
     assert.equals(1, #edge.sub_edges)

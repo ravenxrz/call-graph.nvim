@@ -62,7 +62,7 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command("CallGraphMarkEnd", function()
     Caller.end_mark_mode_and_generate_subgraph()
   end, { desc = "End marking and generate subgraph from marked nodes" })
-  
+
   vim.api.nvim_create_user_command("CallGraphMarkExit", function()
     Caller.exit_mark_mode()
   end, { desc = "Exit mark mode without generating subgraph, clears all markings" })
@@ -80,14 +80,14 @@ end
 local function setup_autocmds()
   -- 创建自动命令组
   local augroup = vim.api.nvim_create_augroup("CallGraphAutoCommands", { clear = true })
-  
+
   -- 注册缓冲区进入事件处理函数
   local buffer_handler = Caller.create_buffer_enter_handler()
   vim.api.nvim_create_autocmd("BufEnter", {
     group = augroup,
     pattern = "*",
     callback = buffer_handler,
-    desc = "Update g_caller when switching to a known call graph buffer"
+    desc = "Update g_caller when switching to a known call graph buffer",
   })
 end
 

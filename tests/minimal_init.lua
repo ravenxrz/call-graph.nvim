@@ -20,7 +20,7 @@ if not vim.json then
     end,
     decode = function(json_str)
       return vim.fn.json_decode(json_str)
-    end
+    end,
   }
 end
 
@@ -36,7 +36,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
   group = cleanup_group,
   callback = function()
     print("正在清理测试环境资源...")
-    
+
     -- 清理所有自动命令组
     local autogroups = vim.api.nvim_get_autocmds({})
     for _, autocmd in ipairs(autogroups) do
@@ -44,12 +44,12 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
         pcall(vim.api.nvim_del_augroup_by_name, autocmd.group_name)
       end
     end
-    
+
     -- 清理所有缓冲区
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
       pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
     end
-    
+
     -- 清除任何可能的全局状态
     if package.loaded["call_graph.utils.events"] then
       local events = require("call_graph.utils.events")
@@ -57,9 +57,9 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
         events.bufs = {}
       end
     end
-    
+
     print("测试环境资源清理完成")
-    vim.cmd("qa!")  -- 强制退出 Neovim
+    vim.cmd("qa!") -- 强制退出 Neovim
   end,
   once = true,
 })

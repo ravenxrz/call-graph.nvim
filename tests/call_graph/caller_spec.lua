@@ -33,7 +33,7 @@ describe("Caller", function()
           buf_id = self.buf.bufid,
           root_node_name = root_node.name,
           call_type = _G.last_call_type,
-          timestamp = os.time()
+          timestamp = os.time(),
         })
         -- Trim history if needed
         if mock_opts.max_history_size and #graph_history > mock_opts.max_history_size then
@@ -42,14 +42,14 @@ describe("Caller", function()
           end
         end
       end,
-      reuse_buf = function(self, buf_id) end
+      reuse_buf = function(self, buf_id) end,
     }
 
     -- Create mock data
     mock_data = {
       generate_call_graph = function(self, callback)
         callback({ name = "test_node" }, {}, {})
-      end
+      end,
     }
 
     -- Default options
@@ -60,7 +60,7 @@ describe("Caller", function()
       in_call_max_depth = 4,
       ref_call_max_depth = 4,
       export_mermaid_graph = false,
-      max_history_size = 20
+      max_history_size = 20,
     }
 
     -- Mock LSP functions
@@ -74,10 +74,10 @@ describe("Caller", function()
             uri = "file:///test.lua",
             range = {
               start = { line = 0, character = 0 },
-              ["end"] = { line = 0, character = 0 }
-            }
-          }
-        }
+              ["end"] = { line = 0, character = 0 },
+            },
+          },
+        },
       }
     end
 
@@ -87,7 +87,7 @@ describe("Caller", function()
       _G.last_call_type = call_type
       local caller = {
         view = mock_view,
-        data = mock_data
+        data = mock_data,
       }
       return caller
     end
@@ -123,12 +123,13 @@ describe("Caller", function()
           call_type_str = "Outcoming"
         end
         local time_str = os.date("%Y-%m-%d %H:%M:%S", entry.timestamp)
-        table.insert(items, string.format("%d. [%s] %s (%s)", 
-          i, call_type_str, entry.root_node_name, time_str))
+        table.insert(items, string.format("%d. [%s] %s (%s)", i, call_type_str, entry.root_node_name, time_str))
       end
       vim.ui.select(items, {
         prompt = "Select a graph to open:",
-        format_item = function(item) return item end,
+        format_item = function(item)
+          return item
+        end,
       }, function(choice, idx)
         if idx then
           local entry = graph_history[idx]
@@ -159,7 +160,7 @@ describe("Caller", function()
         buf_id = 1,
         root_node_name = "test_node",
         call_type = Caller.CallType.INCOMING_CALL,
-        timestamp = os.time()
+        timestamp = os.time(),
       })
 
       Caller.open_latest_graph()
@@ -182,7 +183,7 @@ describe("Caller", function()
         buf_id = 1,
         root_node_name = "test_node",
         call_type = Caller.CallType.INCOMING_CALL,
-        timestamp = os.time()
+        timestamp = os.time(),
       })
 
       Caller.show_graph_history()
@@ -213,13 +214,13 @@ describe("Caller", function()
       end
       assert.equals(2, #graph_history)
     end)
-    
+
     it("should update existing entry and move it to front for same root_node", function()
       -- 我们将跳过这个测试，因为在当前环境下无法正确测试
       -- 实际使用时，插件逻辑会正确处理相同位置的记录
       pending("这个测试在隔离环境下无法正确运行，需要真实的LSP环境")
     end)
-    
+
     it("should identify same position even with different node names", function()
       -- 我们将跳过这个测试，因为在当前环境下无法正确测试
       -- 实际使用时，插件逻辑会正确处理相同位置的记录
@@ -256,4 +257,4 @@ describe("Caller", function()
   end)
 end)
 
-print("结束执行 caller_spec.lua 测试") 
+print("结束执行 caller_spec.lua 测试")

@@ -269,7 +269,7 @@ function OutcomingCall:generate_call_graph(gen_graph_done_cb, reuse_data)
     local edge = Edge:new(root_node, node, call_pos_params)
     table.insert(root_node.outcoming_edges, edge)
     table.insert(node.incoming_edges, edge)
-    
+
     -- 注册边到edges数组
     self:regist_edge(edge)
   end
