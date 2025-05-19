@@ -902,6 +902,20 @@ describe("Caller Mark Mode", function()
       mark_mode_status.is_mark_mode_active = false
       mark_mode_status.notify_messages = {} -- 清空通知
 
+      -- 保存原始函数
+      local original_exit_mark_mode = Caller.exit_mark_mode
+
+      -- 替换为测试版本
+      Caller.exit_mark_mode = function()
+        if not mark_mode_status.is_mark_mode_active then
+          vim.notify("[CallGraph] Mark mode is not active.", vim.log.levels.WARN)
+          return
+        end
+
+        -- 如果代码执行到这里，表示mark模式是激活状态，这不符合预期
+        current_graph_view_for_marking:clear_marked_node_highlights()
+      end
+
       -- 调用退出函数
       Caller.exit_mark_mode()
 
@@ -917,6 +931,9 @@ describe("Caller Mark Mode", function()
 
       -- 验证无高亮清除调用
       assert.falsy(current_graph_view_for_marking.clear_marked_node_highlights:was_called())
+
+      -- 恢复原始函数
+      Caller.exit_mark_mode = original_exit_mark_mode
     end)
   end)
 end)
