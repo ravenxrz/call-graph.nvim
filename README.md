@@ -4,11 +4,11 @@
 
 Inspired by [Sourcetrail](https://github.com/CoatiSoftware/Sourcetrail) and [trails.nvim](https://github.com/kontura/trails.nvim), this is an interactive ascii call graph plugin developed to assist in reading source code.
 
-> This is my first plugin. The plugin is still in a very early stage, and bugs are expected. Feedback is welcome.
+> This plugin is still in active development, and although bugs may be expected, it's becoming more stable with each update. Feedback and contributions are welcome.
 
-**It has only been tested and passed with the clangd server (since my main programming language is C++). In theory, it can be used with all LSP servers that support callHierarchy/incomingCalls.**
+**It has been tested with the clangd server and should work with all LSP servers that support callHierarchy/incomingCalls.**
 
-- The pyright server has been tested and is usable, but its performance is poor, and it is highly not recommended. 
+- The pyright server has been tested and is usable, but its performance is poor, and it is not recommended. 
 
 <https://github.com/user-attachments/assets/e6a869d2-21bf-46eb-bf58-e8a81180f60f>
 
@@ -18,9 +18,9 @@ Demonstrated with the open-source project [muduo](https://github.com/chenshuo/mu
 
 ![](./pic/example.png)
 
-Image Description
+### Basic Features
 
-1. The naming format of each node is `func_name/file:line_numer`.
+1. Each node is named in the format `func_name/file:line_numer`.
 
 2. The incoming edge of each node is the callee, and the outgoing edge is the caller.
 
@@ -45,7 +45,27 @@ At this time, a selection will be provided when pressing `gd`:
 
 <img src="./pic/multi_edge_goto.png" alt="image-20250217213125179" style="zoom:50%;" />
 
-Besides, this plugin will generate mermaid graph and export it to a file, you can use `CallGraphOpenMermaidGraph` cmd to open it.
+### Advanced Features
+
+#### Mermaid Graph Export
+
+This plugin will generate a mermaid graph and export it to a file. You can use `CallGraphOpenMermaidGraph` command to open it.
+
+#### Graph History
+
+The plugin now maintains a history of recently generated call graphs, allowing you to:
+- View a list of previously generated graphs with `CallGraphHistory`
+- Quickly open the most recent graph with `CallGraphOpenLastestGraph`
+- Clear history with `CallGraphClearHistory`
+
+#### Mark Mode
+
+You can now select specific nodes of interest in a call graph to create focused subgraphs:
+1. Use `CallGraphMarkNode` to enter mark mode and mark nodes (or unmark if already marked)
+2. Use `CallGraphMarkEnd` to generate a subgraph from the marked nodes
+3. Use `CallGraphMarkExit` to exit mark mode without generating a subgraph
+
+This feature is particularly useful for analyzing complex call graphs by focusing only on relationships of interest.
 
 ## Installation
 
@@ -59,12 +79,12 @@ Installing with lazy.nvim:
      },
     opts = {
         log_level = "info",
-        reuse_buf = true,  -- Whether to reuse the same buffer for call graphs generated multiple times
         auto_toggle_hl = true, -- Whether to automatically highlight
         hl_delay_ms = 200, -- Interval time for automatic highlighting
         in_call_max_depth = 4, -- Maximum search depth for incoming calls 
         ref_call_max_depth = 4, -- Maximum search depth for reference calls
         export_mermaid_graph = false, -- Whether to export the Mermaid graph
+        max_history_size = 20, -- Maximum number of graphs to keep in history
     }
 }
 ```
@@ -76,11 +96,17 @@ Installing with lazy.nvim:
 - **CallGraphO**: Generate a outcomimg call graph using treesitter (only supports C++)
 - **CallGraphOpenMermaidGraph**: Open the Mermaid graph
 - **CallGraphLog**: Open the log of the call graph
+- **CallGraphHistory**: Show and select from call graph history
+- **CallGraphOpenLastestGraph**: Open the most recently generated call graph
+- **CallGraphMarkNode**: Mark/unmark the node under cursor (automatically starts mark mode if not active)
+- **CallGraphMarkEnd**: End marking and generate subgraph from marked nodes
+- **CallGraphMarkExit**: Exit mark mode without generating subgraph, clears all markings
+- **CallGraphClearHistory**: Clear all call graph history (both in memory and on disk)
 
 ## Highlight Groups
 
-- CallGraphLine: the default value is linked to `Search`.
-
+- **CallGraphLine**: The default value is linked to `Search`
+- **CallGraphMarkedNode**: The default value is linked to `Visual` (used for marked nodes in mark mode)
 
 ## FAQ
 
