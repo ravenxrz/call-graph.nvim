@@ -122,20 +122,53 @@ local function add_to_history(buf_id, root_node_name, call_type, root_node)
     pos_params = vim.deepcopy(root_node.usr_data.attr.pos_params)
   end
 
-  local history_entry = {
-    buf_id = buf_id,
-    root_node_name = root_node_name,
-    call_type = call_type,
-    timestamp = os.time(),
-    pos_params = pos_params  -- 存储位置参数，用于重新生成图
-  }
-  
-  table.insert(graph_history, 1, history_entry)
-  
-  -- Trim history if it exceeds max size
-  if #graph_history > max_history_size then
-    -- Remove the oldest entry (last in the array)
-    table.remove(graph_history, #graph_history)
+  -- 检查是否已存在相同的root_node或相同文件位置的记录
+  local existing_index = nil
+  for i, entry in ipairs(graph_history) do
+    -- 检查是否有相同位置参数的记录
+    if entry.pos_params and pos_params and 
+       entry.pos_params.textDocument.uri == pos_params.textDocument.uri and
+       entry.pos_params.position.line == pos_params.position.line and
+       entry.pos_params.position.character == pos_params.position.character then
+      existing_index = i
+      break
+    end
+    
+    -- 如果没找到相同位置但找到相同的root_node_name和call_type，也认为是相同记录
+    if entry.root_node_name == root_node_name and entry.call_type == call_type then
+      existing_index = i
+      break
+    end
+  end
+
+  if existing_index then
+    -- 已存在记录，更新buf_id和时间戳，并移动到列表最前面
+    local existing_entry = table.remove(graph_history, existing_index)
+    existing_entry.buf_id = buf_id
+    existing_entry.timestamp = os.time()
+    -- 如果新的pos_params更完整，则更新
+    if pos_params and (not existing_entry.pos_params or vim.tbl_isempty(existing_entry.pos_params)) then
+      existing_entry.pos_params = pos_params
+    end
+    table.insert(graph_history, 1, existing_entry)
+    log.debug("[CallGraph] Updated existing history entry for: " .. root_node_name)
+  else
+    -- 创建新的历史记录
+    local history_entry = {
+      buf_id = buf_id,
+      root_node_name = root_node_name,
+      call_type = call_type,
+      timestamp = os.time(),
+      pos_params = pos_params  -- 存储位置参数，用于重新生成图
+    }
+    
+    table.insert(graph_history, 1, history_entry)
+    
+    -- Trim history if it exceeds max size
+    if #graph_history > max_history_size then
+      -- Remove the oldest entry (last in the array)
+      table.remove(graph_history, #graph_history)
+    end
   end
   
   -- 保存历史到文件
