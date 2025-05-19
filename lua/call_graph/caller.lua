@@ -25,7 +25,31 @@ local mermaid_path = ".call_graph.mermaid"
 -- Graph history management
 local graph_history = {}
 local max_history_size = 20
-local history_file_path = vim.fn.stdpath("data") .. "/call_graph_history.json"
+-- 获取项目根目录的函数
+local function get_project_root()
+  -- 尝试使用git获取项目根路径
+  local handle = io.popen("git rev-parse --show-toplevel 2>/dev/null")
+  if handle then
+    local result = handle:read("*a")
+    handle:close()
+    result = result:gsub("%s+$", "") -- 移除尾部空白
+    if result and result ~= "" then
+      return result
+    end
+  end
+  
+  -- 回退到当前工作目录
+  return vim.fn.getcwd()
+end
+
+-- 动态获取历史文件路径，确保每个项目都有自己的历史文件
+local function get_history_file_path()
+  local project_root = get_project_root()
+  return project_root .. "/.call_graph_history.json"
+end
+
+-- 历史文件路径现在是函数而非静态变量
+local history_file_path = get_history_file_path
 
 -- Mark mode state
 local is_mark_mode_active = false
@@ -36,6 +60,9 @@ local current_graph_view_for_marking = nil -- Stores the view of the current gra
 
 --- 保存调用图历史到文件
 local function save_history_to_file()
+  -- 获取项目特定的历史文件路径
+  local file_path = history_file_path()
+  
   -- 创建要保存的数据结构（只保存必要信息，不包括临时的 buf_id）
   local data_to_save = {}
   for _, entry in ipairs(graph_history) do
@@ -121,23 +148,26 @@ local function save_history_to_file()
   end
   
   -- 写入文件
-  local file = io.open(history_file_path, "w")
+  local file = io.open(file_path, "w")
   if not file then
-    vim.notify("[CallGraph] Failed to open history file for writing: " .. history_file_path, vim.log.levels.ERROR)
+    vim.notify("[CallGraph] Failed to open history file for writing: " .. file_path, vim.log.levels.ERROR)
     return
   end
   
   file:write(json_str)
   file:close()
-  log.debug("[CallGraph] History saved to: " .. history_file_path)
+  log.debug("[CallGraph] History saved to: " .. file_path)
 end
 
 --- 从文件加载历史记录
 local function load_history_from_file()
+  -- 获取项目特定的历史文件路径
+  local file_path = history_file_path()
+  
   -- 检查文件是否存在
-  local file = io.open(history_file_path, "r")
+  local file = io.open(file_path, "r")
   if not file then
-    log.debug("[CallGraph] No history file found at: " .. history_file_path)
+    log.debug("[CallGraph] No history file found at: " .. file_path)
     return
   end
   
@@ -790,6 +820,11 @@ function Caller.end_mark_mode_and_generate_subgraph()
     return
   end
 
+  -- 清除原图中的高亮显示
+  if current_view.clear_marked_node_highlights then
+    current_view:clear_marked_node_highlights()
+  end
+
   -- 获取当前图的节点和边数据
   local nodes = current_graph_nodes_for_marking
   local edges = current_graph_edges_for_marking
@@ -822,6 +857,7 @@ function Caller.end_mark_mode_and_generate_subgraph()
   
   -- 确定是否通过入边遍历
   local traverse_by_incoming = subgraph.root_node and subgraph.root_node.incoming_edges and #(subgraph.root_node.incoming_edges) > 0
+  
   -- 使用子图的根节点作为绘图起点
   new_view:draw(subgraph.root_node, traverse_by_incoming)
 
@@ -872,6 +908,12 @@ function Caller.end_mark_mode_and_generate_subgraph()
     
     -- 保存历史到文件
     save_history_to_file()
+    
+    -- 导出mermaid图表，确保用户可以查看最新的图表
+    local opts = require("call_graph").opts
+    if opts.export_mermaid_graph then
+      MermaidGraph.export(subgraph.root_node, mermaid_path)
+    end
     
     vim.notify("[CallGraph] 子图已生成并添加到历史记录", vim.log.levels.INFO)
   end
@@ -983,5 +1025,30 @@ Caller.load_history_from_file = load_history_from_file
 
 -- 暴露 add_to_history 供测试使用
 Caller.add_to_history = add_to_history
+
+-- 添加退出mark模式的函数
+function Caller.exit_mark_mode()
+  -- 如果不在mark模式，直接返回
+  if not is_mark_mode_active then
+    vim.notify("[CallGraph] 未处于标记模式", vim.log.levels.INFO)
+    return
+  end
+  
+  -- 获取当前视图
+  local current_view = current_graph_view_for_marking
+  if current_view and current_view.clear_marked_node_highlights then
+    -- 清除高亮
+    current_view:clear_marked_node_highlights()
+  end
+  
+  -- 重置所有mark模式相关状态
+  is_mark_mode_active = false
+  marked_node_ids = {}
+  current_graph_nodes_for_marking = nil
+  current_graph_edges_for_marking = nil
+  current_graph_view_for_marking = nil
+  
+  vim.notify("[CallGraph] 已退出标记模式", vim.log.levels.INFO)
+end
 
 return Caller

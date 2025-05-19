@@ -62,6 +62,10 @@ local function create_user_cmd()
   vim.api.nvim_create_user_command("CallGraphMarkEnd", function()
     Caller.end_mark_mode_and_generate_subgraph()
   end, { desc = "End marking and generate subgraph from marked nodes" })
+  
+  vim.api.nvim_create_user_command("CallGraphMarkExit", function()
+    Caller.exit_mark_mode()
+  end, { desc = "Exit mark mode without generating subgraph, clears all markings" })
 end
 
 local function setup_hl()
