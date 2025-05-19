@@ -72,8 +72,9 @@ function GraphDrawer:draw_node(node)
   -- end
   -- node.panted = true
   ensure_buffer_has_lines(self, node.row + 1)
-  ensure_buffer_line_has_cols(self, node.row, node.col + #node.text)
-  vim.api.nvim_buf_set_text(self.bufnr, node.row, node.col, node.row, node.col + #node.text, { node.text })
+  local text_len = type(node.text) == "string" and #node.text or tostring(node.text):len()
+  ensure_buffer_line_has_cols(self, node.row, node.col + text_len)
+  vim.api.nvim_buf_set_text(self.bufnr, node.row, node.col, node.row, node.col + text_len, { tostring(node.text) })
 end
 
 ---@class Direction
@@ -243,7 +244,8 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
   end
 
   -- 处理不同行不同列的情况：绘制L型连线
-  local lhs_end_col = lhs.col + #lhs.text
+  local lhs_text_len = type(lhs.text) == "string" and #lhs.text or tostring(lhs.text):len()
+  local lhs_end_col = lhs.col + lhs_text_len
   local rhs_start_col = rhs.col
   assert(lhs_end_col <= rhs_start_col, string.format("lhs_end_col: %d, rhs_start_col: %d", lhs_end_col, rhs_start_col))
   local mid_col = math.max(math.floor((lhs_end_col + rhs_start_col) / 2), lhs_level_max_col + 1) + 1
@@ -355,7 +357,8 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
     current.col = cur_col
     log.info("set node pos", current.text, "level", current.level, "row", current.row, "col", current.col)
     table.insert(cur_level_nodes, current)
-    cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + #current.text)
+    local text_len = type(current.text) == "string" and #current.text or tostring(current.text):len()
+    cur_level_max_col[cur_level] = math.max(cur_level_max_col[cur_level] or 0, cur_col + text_len)
     cur_row = cur_row + self.row_spacing
 
     -- push bfs next level
