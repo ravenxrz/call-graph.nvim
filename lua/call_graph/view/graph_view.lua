@@ -100,10 +100,6 @@ function CallGraphView:set_toggle_auto_hl(toggle)
   self.toggle_auto_hl = toggle
 end
 
-function CallGraphView:reuse_buf(bufid)
-  self.buf.bufid = bufid
-end
-
 local function hl_edge(self, edge)
   if edge.sub_edges == nil then
     log.error("hl: find nil sub edges", edge:to_string())
