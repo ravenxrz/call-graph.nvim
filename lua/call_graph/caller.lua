@@ -57,9 +57,15 @@ local function save_history_to_file()
       
       -- 创建节点索引表，用于后续重建引用
       local node_indices = {}
-      for id, node in pairs(subgraph_copy.nodes_map) do
-        node_indices[node] = id
+      
+      -- 将nodes_map转换为字符串键以避免稀疏数组问题
+      local string_keyed_nodes_map = {}
+      for id, node in pairs(subgraph_copy.nodes_map or {}) do
+        local str_id = tostring(id)
+        string_keyed_nodes_map[str_id] = node
+        node_indices[node] = str_id -- 使用字符串ID
       end
+      subgraph_copy.nodes_map = string_keyed_nodes_map
       
       -- 处理节点的边引用（移除循环引用）
       for _, node in pairs(subgraph_copy.nodes_map) do
@@ -227,22 +233,40 @@ local function load_history_from_file()
         
         -- 重建边对节点的引用
         for _, edge in ipairs(subgraph.edges or {}) do
-          if edge.from_node_id and subgraph.nodes_map and subgraph.nodes_map[edge.from_node_id] then
-            edge.from_node = subgraph.nodes_map[edge.from_node_id]
+          if edge.from_node_id and subgraph.nodes_map then
+            -- 处理字符串键（从save_history_to_file函数中生成的）
+            local from_id = edge.from_node_id
+            edge.from_node = subgraph.nodes_map[from_id]
             edge.from_node_id = nil
           end
           
-          if edge.to_node_id and subgraph.nodes_map and subgraph.nodes_map[edge.to_node_id] then
-            edge.to_node = subgraph.nodes_map[edge.to_node_id]
+          if edge.to_node_id and subgraph.nodes_map then
+            -- 处理字符串键（从save_history_to_file函数中生成的）
+            local to_id = edge.to_node_id
+            edge.to_node = subgraph.nodes_map[to_id]
             edge.to_node_id = nil
           end
         end
         
         -- 重建根节点引用
-        if subgraph.root_node_id and subgraph.nodes_map and subgraph.nodes_map[subgraph.root_node_id] then
-          subgraph.root_node = subgraph.nodes_map[subgraph.root_node_id]
+        if subgraph.root_node_id and subgraph.nodes_map then
+          -- 处理字符串键（从save_history_to_file函数中生成的）
+          local root_id = subgraph.root_node_id
+          subgraph.root_node = subgraph.nodes_map[root_id]
           subgraph.root_node_id = nil
         end
+        
+        -- 如果需要，将节点映射转回数字键以保持与代码其余部分的兼容性
+        local numeric_nodes_map = {}
+        for str_id, node in pairs(subgraph.nodes_map) do
+          local num_id = tonumber(str_id)
+          if num_id then
+            numeric_nodes_map[num_id] = node
+          else
+            numeric_nodes_map[str_id] = node -- 保留非数字键
+          end
+        end
+        subgraph.nodes_map = numeric_nodes_map
         
         history_item.subgraph = subgraph
       end
@@ -390,6 +414,12 @@ function Caller.regenerate_graph_from_history(history_entry)
   -- 对于子图，直接从保存的子图结构重新生成
   if history_entry.call_type == Caller.CallType.SUBGRAPH_CALL and history_entry.subgraph then
     local subgraph = history_entry.subgraph
+    
+    -- 确保子图结构完整
+    if not subgraph.root_node then
+      vim.notify("[CallGraph] 无法重新生成子图：缺少根节点", vim.log.levels.ERROR)
+      return
+    end
     
     -- 创建新视图并绘制子图
     local new_view = CallGraphView:new()
@@ -802,13 +832,34 @@ function Caller.end_mark_mode_and_generate_subgraph()
   if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
     local root_node_name = subgraph.root_node.text or "Subgraph"
     
+    -- 深度复制子图结构，确保安全处理
+    local subgraph_copy = vim.deepcopy(subgraph)
+    
+    -- 验证子图结构的完整性
+    if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
+      log.warn("子图结构不完整，无法添加到历史记录")
+      vim.notify("[CallGraph] 子图结构不完整，无法保存到历史记录", vim.log.levels.WARN)
+      return
+    end
+    
+    -- 确保nodes_map中所有节点ID都是有效的
+    local fixed_nodes_map = {}
+    for id, node in pairs(subgraph_copy.nodes_map) do
+      if type(node) == "table" then
+        fixed_nodes_map[id] = node
+      else
+        log.warn("跳过非表类型的节点: " .. tostring(id))
+      end
+    end
+    subgraph_copy.nodes_map = fixed_nodes_map
+    
     -- 创建一个包含整个子图的历史记录条目
     local history_entry = {
       buf_id = new_view.buf.bufid,
       root_node_name = root_node_name,
       call_type = Caller.CallType.SUBGRAPH_CALL,
       timestamp = os.time(),
-      subgraph = vim.deepcopy(subgraph)  -- 保存整个子图结构而不仅是位置参数
+      subgraph = subgraph_copy
     }
     
     -- 插入到历史记录的开头
