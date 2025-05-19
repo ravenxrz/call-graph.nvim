@@ -18,6 +18,14 @@ Caller.CallType = {
 
 Caller.__index = Caller
 
+-- Create a caller instance with the given data and view
+local function create_caller(data, view)
+  local caller = setmetatable({}, Caller)
+  caller.view = view
+  caller.data = data
+  return caller
+end
+
 local g_caller = nil
 local last_call_type = Caller.CallType._NO_CALl
 local mermaid_path = ".call_graph.mermaid"
@@ -1231,6 +1239,11 @@ Caller._get_graph_history = function()
   return graph_history
 end
 
+-- Expose graph_history set function for testing
+Caller._set_graph_history = function(history)
+  graph_history = history
+end
+
 Caller._set_max_history_size = function(size)
   max_history_size = size
   -- If current history exceeds new size limit, trim
@@ -1280,7 +1293,7 @@ end
 function Caller.exit_mark_mode()
   -- If not in mark mode, return directly
   if not is_mark_mode_active then
-    vim.notify("[CallGraph] Not in mark mode", vim.log.levels.INFO)
+    vim.notify("[CallGraph] Mark mode is not active.", vim.log.levels.WARN)
     return
   end
 

@@ -1448,7 +1448,7 @@ describe("GraphDrawer", function()
     -- Mock only passing nodes list, not setting nodes map
     graph_drawer.nodes = nil
     graph_drawer.nodes_list = { node1, node2, node3 }
-    
+
     -- Manually add nodes to nodes to ensure test pass
     graph_drawer.nodes = { [node1.nodeid] = node1, [node2.nodeid] = node2, [node3.nodeid] = node3 }
 
