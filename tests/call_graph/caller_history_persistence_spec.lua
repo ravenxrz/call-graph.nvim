@@ -2,9 +2,16 @@ local Caller = require("call_graph.caller")
 local base_mock = require("tests.base_mock")
 local mock = require("luassert.mock")
 
-describe("Call Graph History Persistence", function()
+describe("Caller History Persistence", function()
   local original_io_open = io.open
-  local test_history_file_path = "/tmp/test_call_graph_history.json"
+  local original_vim_api_nvim_win_set_cursor = vim.api.nvim_win_set_cursor
+  local original_vim_cmd = vim.cmd
+  local opened_files = {}
+  local written_content = {}
+  local cursor_positions = {}
+  local executed_commands = {}
+  local original_save_history_to_file = Caller.save_history_to_file
+
   local mock_opts = {
     reuse_buf = false,
     hl_delay_ms = 200,
@@ -12,46 +19,52 @@ describe("Call Graph History Persistence", function()
     in_call_max_depth = 4,
     ref_call_max_depth = 4,
     export_mermaid_graph = false,
-    max_history_size = 5, -- 使用较小的值便于测试
+    max_history_size = 5, -- Use a smaller value for easier testing
   }
 
-  -- 重置Caller内部状态的辅助函数
+  -- Helper function to reset Caller internal state
   local function reset_caller_state()
-    -- 清空历史记录
-    local history = Caller._get_graph_history()
-    while #history > 0 do
-      table.remove(history, 1)
-    end
-    -- 设置最大历史记录大小
+    -- Clear history records
+    Caller._set_graph_history({})
+    assert.are.equal(0, #Caller._get_graph_history())
+
+    -- Set max history size
     Caller._set_max_history_size(mock_opts.max_history_size)
+    assert.are.equal(mock_opts.max_history_size, #Caller._get_graph_history() + mock_opts.max_history_size)
   end
 
   before_each(function()
-    -- 保存原始 io.open 函数
+    -- Save original io.open function
     original_io_open = io.open
 
-    -- 重置测试状态
-    base_mock.reset_calls()
-    reset_caller_state()
+    -- Reset test state
+    opened_files = {}
+    written_content = {}
+    cursor_positions = {}
+    executed_commands = {}
 
-    -- 模拟 vim.api.nvim_win_set_cursor 函数，避免光标位置错误
-    vim.api.nvim_win_set_cursor = function(_, _)
-      return true
+    -- Mock vim.api.nvim_win_set_cursor function to prevent cursor position errors
+    vim.api.nvim_win_set_cursor = function(win, pos)
+      cursor_positions[win] = pos
     end
 
-    -- 模拟 vim.cmd 函数，避免实际执行命令
+    -- Mock vim.cmd function to prevent actual command execution
     vim.cmd = function(cmd)
-      table.insert(base_mock.cmd_calls, cmd)
-      return true
+      table.insert(executed_commands, cmd)
     end
 
-    -- 禁用保存函数，避免干扰测试
-    package.loaded["call_graph.caller"].save_history_to_file = function() end
+    -- Disable save function to prevent interference with tests
+    Caller.save_history_to_file = function() end
+
+    reset_caller_state()
   end)
 
   after_each(function()
-    -- 恢复原始函数
+    -- Restore original functions
     io.open = original_io_open
+    vim.api.nvim_win_set_cursor = original_vim_api_nvim_win_set_cursor
+    vim.cmd = original_vim_cmd
+    Caller.save_history_to_file = original_save_history_to_file
   end)
 
   describe("Basic persistence functionality", function()

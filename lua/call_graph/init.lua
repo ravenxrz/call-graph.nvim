@@ -78,10 +78,10 @@ local function setup_hl()
 end
 
 local function setup_autocmds()
-  -- 创建自动命令组
+  -- Create autocommand group
   local augroup = vim.api.nvim_create_augroup("CallGraphAutoCommands", { clear = true })
 
-  -- 注册缓冲区进入事件处理函数
+  -- Register buffer enter event handler
   local buffer_handler = Caller.create_buffer_enter_handler()
   vim.api.nvim_create_autocmd("BufEnter", {
     group = augroup,

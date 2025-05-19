@@ -25,48 +25,37 @@ local mermaid_path = ".call_graph.mermaid"
 -- Graph history management
 local graph_history = {}
 local max_history_size = 20
--- 获取项目根目录的函数
+-- Get project root directory function
 local function get_project_root()
-  -- 尝试使用git获取项目根路径
+  -- Try to get project root path using git
   local handle = io.popen("git rev-parse --show-toplevel 2>/dev/null")
   if handle then
     local result = handle:read("*a")
     handle:close()
-    result = result:gsub("%s+$", "") -- 移除尾部空白
+    result = result:gsub("%s+$", "") -- Remove trailing whitespace
     if result and result ~= "" then
       return result
     end
   end
 
-  -- 回退到当前工作目录
+  -- Fallback to current working directory
   return vim.fn.getcwd()
 end
 
--- 动态获取历史文件路径，确保每个项目都有自己的历史文件
+-- Dynamically get history file path, ensuring each project has its own history file
 local function get_history_file_path()
   local project_root = get_project_root()
   return project_root .. "/.call_graph_history.json"
 end
 
--- 历史文件路径现在是函数而非静态变量
+-- History file path is now a function instead of a static variable
 local history_file_path = get_history_file_path
 
---- Creates a new caller instance.
----@param data ICallGraphData|RCallGraphData|OutcomingCall The call graph data object.
----@param view CallGraphView The call graph view object.
----@return Caller The new caller instance.
-local function create_caller(data, view)
-  local o = setmetatable({}, Caller)
-  o.data = data
-  o.view = view
-  return o
-end
-
--- 保存图表缓冲区ID与caller实例的映射，便于在切换缓冲区时更新g_caller
--- 这个映射对解决以下问题至关重要：
--- 1. 当用户从一个图表切换到另一个图表时，确保g_caller正确指向当前缓冲区对应的实例
--- 2. 在从全图生成子图后，如果用户手动切换回全图，能够恢复全图的上下文
--- 3. 确保mark_node_under_cursor在任何活动的图表缓冲区中都能正常工作
+-- Store mapping between graph buffer ID and caller instance for easier updating of g_caller
+-- This mapping is crucial for solving the following issues:
+-- 1. When user switches from one graph to another, ensure g_caller correctly points to the instance for the current buffer
+-- 2. After generating a subgraph from a full graph, if user manually switches back to the full graph, restore the full graph context
+-- 3. Ensure mark_node_under_cursor works correctly in any active graph buffer
 local buffer_caller_map = {}
 
 -- Mark mode state
@@ -76,12 +65,12 @@ local current_graph_nodes_for_marking = nil -- Stores the 'nodes' table of the c
 local current_graph_edges_for_marking = nil -- Stores the 'edges' table of the current graph
 local current_graph_view_for_marking = nil -- Stores the view of the current graph being marked
 
---- 保存调用图历史到文件
+--- Save history to file
 local function save_history_to_file()
-  -- 获取项目特定的历史文件路径
+  -- Get project-specific history file path
   local file_path = history_file_path()
 
-  -- 创建要保存的数据结构（只保存必要信息，不包括临时的 buf_id）
+  -- Create data structure to save (only save necessary information, not including temporary buf_id)
   local data_to_save = {}
   for _, entry in ipairs(graph_history) do
     local history_item = {
@@ -90,31 +79,31 @@ local function save_history_to_file()
       timestamp = entry.timestamp,
     }
 
-    -- 处理常规图形（通过pos_params重新生成）
+    -- Handle regular graphs (regenerate through pos_params)
     if entry.pos_params then
       history_item.pos_params = entry.pos_params
     end
 
-    -- 处理子图（保存完整结构，但需要处理循环引用）
+    -- Handle subgraphs (save full structure, but need to handle circular references)
     if entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph then
-      -- 深度复制子图结构，以便我们可以安全地修改它而不影响原始数据
+      -- Deep copy subgraph structure so we can safely modify it without affecting original data
       local subgraph_copy = vim.deepcopy(entry.subgraph)
 
-      -- 创建节点索引表，用于后续重建引用
+      -- Create node index table for later reconstruction of references
       local node_indices = {}
 
-      -- 将nodes_map转换为字符串键以避免稀疏数组问题
+      -- Convert nodes_map to string keyed map to avoid sparse array problems
       local string_keyed_nodes_map = {}
       for id, node in pairs(subgraph_copy.nodes_map or {}) do
         local str_id = tostring(id)
         string_keyed_nodes_map[str_id] = node
-        node_indices[node] = str_id -- 使用字符串ID
+        node_indices[node] = str_id -- Use string ID
       end
       subgraph_copy.nodes_map = string_keyed_nodes_map
 
-      -- 处理节点的边引用（移除循环引用）
+      -- Handle edge references (remove circular references)
       for _, node in pairs(subgraph_copy.nodes_map) do
-        -- 存储边的ID引用而不是直接对象引用
+        -- Store edge ID references instead of direct object references
         local incoming_edge_ids = {}
         for _, edge in ipairs(node.incoming_edges or {}) do
           table.insert(incoming_edge_ids, edge.edgeid)
@@ -130,7 +119,7 @@ local function save_history_to_file()
         node.outcoming_edges = nil
       end
 
-      -- 处理边的节点引用（用ID替换对象引用）
+      -- Handle node references (use ID instead of object references)
       for i, edge in ipairs(subgraph_copy.edges or {}) do
         if edge.from_node and node_indices[edge.from_node] then
           edge.from_node_id = node_indices[edge.from_node]
@@ -142,12 +131,12 @@ local function save_history_to_file()
           edge.to_node = nil
         end
 
-        -- 确保子边的信息被正确保存
+        -- Ensure sub_edges information is correctly saved
         if edge.sub_edges then
           local serialized_sub_edges = {}
           for _, sub_edge in ipairs(edge.sub_edges) do
             if type(sub_edge) == "table" then
-              -- 只保存子边的基本属性，不需要方法
+              -- Only save basic attributes of sub_edges, no need for methods
               table.insert(serialized_sub_edges, {
                 start_row = sub_edge.start_row,
                 start_col = sub_edge.start_col,
@@ -161,7 +150,7 @@ local function save_history_to_file()
         end
       end
 
-      -- 处理根节点引用
+      -- Handle root node references
       if subgraph_copy.root_node and node_indices[subgraph_copy.root_node] then
         subgraph_copy.root_node_id = node_indices[subgraph_copy.root_node]
         subgraph_copy.root_node = nil
@@ -170,20 +159,20 @@ local function save_history_to_file()
       history_item.subgraph = subgraph_copy
     end
 
-    -- 只保存有位置参数或子图数据的条目
+    -- Only save entries with position parameters or subgraph data
     if entry.pos_params or (entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph) then
       table.insert(data_to_save, history_item)
     end
   end
 
-  -- 将数据编码为 JSON
+  -- Encode data to JSON
   local ok, json_str = pcall(vim.json.encode, data_to_save)
   if not ok then
     vim.notify("[CallGraph] Failed to encode history data: " .. (json_str or "unknown error"), vim.log.levels.ERROR)
     return
   end
 
-  -- 写入文件
+  -- Write to file
   local file = io.open(file_path, "w")
   if not file then
     vim.notify("[CallGraph] Failed to open history file for writing: " .. file_path, vim.log.levels.ERROR)
@@ -195,19 +184,19 @@ local function save_history_to_file()
   log.debug("[CallGraph] History saved to: " .. file_path)
 end
 
---- 从文件加载历史记录
+--- Load history from file
 local function load_history_from_file()
-  -- 获取项目特定的历史文件路径
+  -- Get project-specific history file path
   local file_path = history_file_path()
 
-  -- 检查文件是否存在
+  -- Check if file exists
   local file = io.open(file_path, "r")
   if not file then
     log.debug("[CallGraph] No history file found at: " .. file_path)
     return
   end
 
-  -- 读取文件内容
+  -- Read file content
   local content = file:read("*all")
   file:close()
 
@@ -216,10 +205,10 @@ local function load_history_from_file()
     return
   end
 
-  -- 调试输出
+  -- Debug output
   log.debug("[CallGraph] Loaded history file content length: " .. #content)
 
-  -- 解析 JSON
+  -- Parse JSON
   local ok, data = pcall(vim.json.decode, content)
   if not ok or type(data) ~= "table" then
     vim.notify("[CallGraph] Failed to parse history file: " .. (data or "unknown error"), vim.log.levels.WARN)
@@ -227,50 +216,50 @@ local function load_history_from_file()
     return
   end
 
-  -- 调试输出
+  -- Debug output
   log.debug("[CallGraph] Parsed JSON data count: " .. #data)
 
-  -- 将加载的数据转换为历史记录格式（初始化 buf_id 为无效值）
+  -- Convert loaded data to history record format (initialize buf_id as invalid)
   graph_history = {}
   for _, entry in ipairs(data) do
     if entry.root_node_name and entry.call_type then
       local history_item = {
-        buf_id = -1, -- 初始化为无效值，在生成图时会更新
+        buf_id = -1, -- Initialize as invalid, will be updated when generating graph
         root_node_name = entry.root_node_name,
         call_type = entry.call_type,
         timestamp = entry.timestamp or os.time(),
       }
 
-      -- 加载常规图的位置参数
+      -- Load position parameters for regular graphs
       if entry.pos_params then
         history_item.pos_params = entry.pos_params
       end
 
-      -- 加载子图结构并重建对象引用关系
+      -- Load subgraph structure and rebuild object references
       if entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph then
         local subgraph = entry.subgraph
         log.debug("[CallGraph] Processing subgraph data with " .. vim.tbl_count(subgraph.nodes_map or {}) .. " nodes")
 
-        -- 首先确保所有边都有一个edgeid
+        -- First ensure all edges have an edgeid
         for i, edge in ipairs(subgraph.edges or {}) do
           if not edge.edgeid then
-            edge.edgeid = i -- 如果没有edgeid，使用索引作为edgeid
+            edge.edgeid = i -- If no edgeid, use index as edgeid
           end
         end
 
-        -- 创建边ID到边对象的映射
+        -- Create mapping from edge ID to edge object
         local edge_map = {}
         for _, edge in ipairs(subgraph.edges or {}) do
           edge_map[edge.edgeid] = edge
         end
 
-        -- 重建边和节点之间的引用
+        -- Rebuild references between edges and nodes
         for id, node in pairs(subgraph.nodes_map or {}) do
-          -- 确保 node 是表类型
+          -- Ensure node is a table
           if type(node) == "table" then
-            -- 重建入边引用
+            -- Rebuild incoming edge references
             node.incoming_edges = {}
-            -- 安全地获取入边ID列表
+            -- Safely get incoming edge ID list
             local incoming_edge_ids = node.incoming_edge_ids or {}
             if type(incoming_edge_ids) == "table" then
               for _, edge_id in ipairs(incoming_edge_ids) do
@@ -281,9 +270,9 @@ local function load_history_from_file()
             end
             node.incoming_edge_ids = nil
 
-            -- 重建出边引用
+            -- Rebuild outgoing edge references
             node.outcoming_edges = {}
-            -- 安全地获取出边ID列表
+            -- Safely get outgoing edge ID list
             local outcoming_edge_ids = node.outcoming_edge_ids or {}
             if type(outcoming_edge_ids) == "table" then
               for _, edge_id in ipairs(outcoming_edge_ids) do
@@ -294,7 +283,7 @@ local function load_history_from_file()
             end
             node.outcoming_edge_ids = nil
           else
-            -- 如果节点不是表类型，创建一个空的节点结构
+            -- If node is not a table type, create an empty node structure
             log.warn("[CallGraph] Node with ID " .. tostring(id) .. " is not a table type: " .. type(node))
             subgraph.nodes_map[id] = {
               nodeid = id,
@@ -305,33 +294,33 @@ local function load_history_from_file()
           end
         end
 
-        -- 首先确保所有边的节点引用被正确设置
+        -- First ensure all edges' node references are correctly set
         for _, edge in ipairs(subgraph.edges or {}) do
           if edge.from_node_id and subgraph.nodes_map then
-            -- 处理字符串键（从save_history_to_file函数中生成的）
+            -- Handle string keys (generated from save_history_to_file function)
             local from_id = edge.from_node_id
             edge.from_node = subgraph.nodes_map[from_id]
             edge.from_node_id = nil
           end
 
           if edge.to_node_id and subgraph.nodes_map then
-            -- 处理字符串键（从save_history_to_file函数中生成的）
+            -- Handle string keys (generated from save_history_to_file function)
             local to_id = edge.to_node_id
             edge.to_node = subgraph.nodes_map[to_id]
             edge.to_node_id = nil
           end
         end
 
-        -- 使用Edge:new重新创建所有Edge对象，确保它们都有正确的方法
+        -- Use Edge:new to recreate all Edge objects, ensuring they have correct methods
         local Edge = require("call_graph.class.edge")
         for i, edge in ipairs(subgraph.edges or {}) do
           if edge.from_node and edge.to_node then
-            -- 保存重要属性
+            -- Save important attributes
             local pos_params = edge.pos_params
             local sub_edges = edge.sub_edges
             local edgeid = edge.edgeid
 
-            -- 处理sub_edges，确保是SubEdge对象
+            -- Handle sub_edges, ensure they are SubEdge objects
             local processed_sub_edges = {}
             if sub_edges and type(sub_edges) == "table" then
               local SubEdge = require("call_graph.class.subedge")
@@ -349,7 +338,7 @@ local function load_history_from_file()
                     sub_edge_data.end_row,
                     sub_edge_data.end_col
                   )
-                  -- 确保to_string方法被正确设置
+                  -- Ensure to_string method is correctly set
                   if not sub_edge.to_string then
                     sub_edge.to_string = SubEdge.to_string
                   end
@@ -358,16 +347,16 @@ local function load_history_from_file()
               end
             end
 
-            -- 创建新的Edge对象
+            -- Create new Edge object
             local new_edge = Edge:new(edge.from_node, edge.to_node, pos_params, processed_sub_edges)
 
-            -- 保持原来的edgeid，确保引用一致性
+            -- Keep original edgeid, ensure reference consistency
             new_edge.edgeid = edgeid
 
-            -- 用新创建的Edge对象替换原来的
+            -- Replace original with new created Edge object
             subgraph.edges[i] = new_edge
 
-            -- 更新节点的边引用
+            -- Update node edge references
             for j, e in ipairs(edge.from_node.outcoming_edges or {}) do
               if e.edgeid == edgeid then
                 edge.from_node.outcoming_edges[j] = new_edge
@@ -382,22 +371,22 @@ local function load_history_from_file()
           end
         end
 
-        -- 重建根节点引用
+        -- Rebuild root node references
         if subgraph.root_node_id and subgraph.nodes_map then
-          -- 处理字符串键（从save_history_to_file函数中生成的）
+          -- Handle string keys (generated from save_history_to_file function)
           local root_id = subgraph.root_node_id
           subgraph.root_node = subgraph.nodes_map[root_id]
           subgraph.root_node_id = nil
         end
 
-        -- 如果需要，将节点映射转回数字键以保持与代码其余部分的兼容性
+        -- If needed, convert node mapping back to numeric keys for compatibility with rest of the code
         local numeric_nodes_map = {}
         for str_id, node in pairs(subgraph.nodes_map) do
           local num_id = tonumber(str_id)
           if num_id then
             numeric_nodes_map[num_id] = node
           else
-            numeric_nodes_map[str_id] = node -- 保留非数字键
+            numeric_nodes_map[str_id] = node -- Keep non-numeric keys
           end
         end
         subgraph.nodes_map = numeric_nodes_map
@@ -405,9 +394,9 @@ local function load_history_from_file()
         history_item.subgraph = subgraph
       end
 
-      -- 只添加有用的条目（有位置参数或子图）
+      -- Only add useful entries (with position parameters or subgraph)
       if history_item.pos_params or (entry.call_type == Caller.CallType.SUBGRAPH_CALL and history_item.subgraph) then
-        table.insert(graph_history, history_item)
+        table.insert(graph_history, 1, history_item)
         log.debug(
           "[CallGraph] Added history record: "
             .. (history_item.root_node_name or "nil")
@@ -433,16 +422,16 @@ end
 ---@param call_type CallType The type of call graph
 ---@param root_node table The actual root node object containing position parameters
 local function add_to_history(buf_id, root_node_name, call_type, root_node)
-  -- 确保 root_node 和必要的调用位置信息存在
+  -- Ensure root_node and necessary call position information exist
   local pos_params = nil
   if root_node and root_node.usr_data and root_node.usr_data.attr and root_node.usr_data.attr.pos_params then
     pos_params = vim.deepcopy(root_node.usr_data.attr.pos_params)
   end
 
-  -- 检查是否已存在相同的root_node或相同文件位置的记录
+  -- Check if same root_node or same file position record already exists
   local existing_index = nil
   for i, entry in ipairs(graph_history) do
-    -- 检查是否有相同位置参数的记录
+    -- Check if there's a record with same position parameters
     if
       entry.pos_params
       and pos_params
@@ -454,7 +443,7 @@ local function add_to_history(buf_id, root_node_name, call_type, root_node)
       break
     end
 
-    -- 如果没找到相同位置但找到相同的root_node_name和call_type，也认为是相同记录
+    -- If no same position but find same root_node_name and call_type, also consider it same record
     if entry.root_node_name == root_node_name and entry.call_type == call_type then
       existing_index = i
       break
@@ -462,24 +451,24 @@ local function add_to_history(buf_id, root_node_name, call_type, root_node)
   end
 
   if existing_index then
-    -- 已存在记录，更新buf_id和时间戳，并移动到列表最前面
+    -- Record already exists, update buf_id and timestamp, and move to front of list
     local existing_entry = table.remove(graph_history, existing_index)
     existing_entry.buf_id = buf_id
     existing_entry.timestamp = os.time()
-    -- 如果新的pos_params更完整，则更新
+    -- If new pos_params are more complete, update
     if pos_params and (not existing_entry.pos_params or vim.tbl_isempty(existing_entry.pos_params)) then
       existing_entry.pos_params = pos_params
     end
     table.insert(graph_history, 1, existing_entry)
     log.debug("[CallGraph] Updated existing history entry for: " .. root_node_name)
   else
-    -- 创建新的历史记录
+    -- Create new history record
     local history_entry = {
       buf_id = buf_id,
       root_node_name = root_node_name,
       call_type = call_type,
       timestamp = os.time(),
-      pos_params = pos_params, -- 存储位置参数，用于重新生成图
+      pos_params = pos_params, -- Store position parameters for regenerating graph
     }
 
     table.insert(graph_history, 1, history_entry)
@@ -491,7 +480,7 @@ local function add_to_history(buf_id, root_node_name, call_type, root_node)
     end
   end
 
-  -- 保存历史到文件
+  -- Save history to file
   save_history_to_file()
 end
 
@@ -506,7 +495,7 @@ function Caller.open_latest_graph()
   if vim.api.nvim_buf_is_valid(latest.buf_id) then
     vim.cmd("buffer " .. latest.buf_id)
   else
-    -- 尝试重新生成图
+    -- Try to regenerate graph
     Caller.regenerate_graph_from_history(latest)
   end
 end
@@ -514,7 +503,7 @@ end
 --- Show graph history and let user select
 function Caller.show_graph_history()
   if #graph_history == 0 then
-    -- 尝试从文件加载历史
+    -- Try to load history from file
     load_history_from_file()
 
     if #graph_history == 0 then
@@ -551,63 +540,63 @@ function Caller.show_graph_history()
       if vim.api.nvim_buf_is_valid(entry.buf_id) then
         vim.cmd("buffer " .. entry.buf_id)
       else
-        -- 尝试重新生成图
+        -- Try to regenerate graph
         Caller.regenerate_graph_from_history(entry)
       end
     end
   end)
 end
 
---- 从历史记录重新生成调用图
----@param history_entry table 历史记录条目
+--- Regenerate graph from history
+---@param history_entry table History record entry
 function Caller.regenerate_graph_from_history(history_entry)
-  -- 对于子图，直接从保存的子图结构重新生成
+  -- For subgraphs, regenerate directly from saved subgraph structure
   if history_entry.call_type == Caller.CallType.SUBGRAPH_CALL and history_entry.subgraph then
     local subgraph = history_entry.subgraph
 
-    -- 确保子图结构完整
+    -- Ensure subgraph structure is complete
     if not subgraph.root_node then
-      vim.notify("[CallGraph] 无法重新生成子图：缺少根节点", vim.log.levels.ERROR)
+      vim.notify("[CallGraph] Cannot regenerate subgraph: missing root node", vim.log.levels.ERROR)
       return
     end
 
-    -- 创建新视图并绘制子图
+    -- Create new view and draw subgraph
     local new_view = CallGraphView:new()
 
-    -- 确定是否通过入边遍历
+    -- Determine if traversing through incoming edges
     local traverse_by_incoming = subgraph.root_node
       and subgraph.root_node.incoming_edges
       and #subgraph.root_node.incoming_edges > 0
 
-    -- 使用子图的根节点作为绘图起点
+    -- Use subgraph's root node as drawing starting point
     new_view:draw(subgraph.root_node, traverse_by_incoming)
 
-    -- 将子图添加到历史记录
+    -- Add subgraph to history
     if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
       local root_node_name = subgraph.root_node.text or "Subgraph"
 
-      -- 深度复制子图结构，确保安全处理
+      -- Deep copy subgraph structure, ensure safe handling
       local subgraph_copy = vim.deepcopy(subgraph)
 
-      -- 验证子图结构的完整性
+      -- Verify subgraph structure completeness
       if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
-        log.warn("子图结构不完整，无法添加到历史记录")
-        vim.notify("[CallGraph] 子图结构不完整，无法保存到历史记录", vim.log.levels.WARN)
+        log.warn("Subgraph structure incomplete, cannot add to history")
+        vim.notify("[CallGraph] Subgraph structure incomplete, cannot save to history", vim.log.levels.WARN)
         return
       end
 
-      -- 确保nodes_map中所有节点ID都是有效的
+      -- Ensure all node IDs in nodes_map are valid
       local fixed_nodes_map = {}
       for id, node in pairs(subgraph_copy.nodes_map) do
         if type(node) == "table" then
           fixed_nodes_map[id] = node
         else
-          log.warn("跳过非表类型的节点: " .. tostring(id))
+          log.warn("Skipping non-table type node: " .. tostring(id))
         end
       end
       subgraph_copy.nodes_map = fixed_nodes_map
 
-      -- 创建一个包含整个子图的历史记录条目
+      -- Create history record entry for entire subgraph
       local history_entry = {
         buf_id = new_view.buf.bufid,
         root_node_name = root_node_name,
@@ -616,43 +605,43 @@ function Caller.regenerate_graph_from_history(history_entry)
         subgraph = subgraph_copy,
       }
 
-      -- 插入到历史记录的开头
+      -- Insert into history at front
       table.insert(graph_history, 1, history_entry)
 
-      -- 如果超出最大历史记录数，移除最老的
+      -- If history exceeds max size, remove oldest
       if #graph_history > max_history_size then
         table.remove(graph_history, #graph_history)
       end
 
-      -- 保存历史到文件
+      -- Save history to file
       save_history_to_file()
 
-      -- 导出mermaid图表，确保用户可以查看最新的图表
+      -- Export mermaid chart, ensure user can view latest chart
       local opts = require("call_graph").opts
       if opts.export_mermaid_graph then
         MermaidGraph.export(subgraph.root_node, mermaid_path)
       end
 
-      vim.notify("[CallGraph] 子图已生成并添加到历史记录", vim.log.levels.INFO)
+      vim.notify("[CallGraph] Subgraph generated and added to history", vim.log.levels.INFO)
     end
 
-    -- 创建新的caller实例
+    -- Create new caller instance
     local new_caller = create_caller(nil, new_view)
 
-    -- 保存原始的g_caller引用
+    -- Save original g_caller reference
     local original_caller = g_caller
 
-    -- 更新全局视图
+    -- Update global view
     g_caller = new_caller
     last_call_type = Caller.CallType.SUBGRAPH_CALL
 
-    -- 保存缓冲区ID到caller实例的映射关系
+    -- Save buffer ID to caller instance mapping
     if new_view.buf and new_view.buf.bufid then
       buffer_caller_map[new_view.buf.bufid] = new_caller
       log.debug("[CallGraph] Added subgraph buffer " .. new_view.buf.bufid .. " to buffer_caller_map")
     end
 
-    -- 确保原始图的缓冲区ID仍然映射到原始的caller实例
+    -- Ensure original graph buffer ID still maps to original caller instance
     if original_caller and original_caller.view and original_caller.view.buf and original_caller.view.buf.bufid then
       buffer_caller_map[original_caller.view.buf.bufid] = original_caller
       log.debug(
@@ -660,21 +649,21 @@ function Caller.regenerate_graph_from_history(history_entry)
       )
     end
 
-    return -- 子图已处理完成，直接返回
+    return -- Subgraph processing completed, return directly
   end
 
-  -- 到这里的都是常规图，需要检查位置数据
+  -- If here, it's regular graph, need to check position data
   if not history_entry or not history_entry.pos_params then
     vim.notify("[CallGraph] Cannot regenerate graph: missing position data", vim.log.levels.ERROR)
     return
   end
 
-  -- 保存当前文件路径和位置
+  -- Save current file path and position
   local current_buf = vim.api.nvim_get_current_buf()
   local current_win = vim.api.nvim_get_current_win()
   local current_pos = vim.api.nvim_win_get_cursor(current_win)
 
-  -- 打开目标文件
+  -- Open target file
   local uri = history_entry.pos_params.textDocument.uri
   local file_path = vim.uri_to_fname(uri)
   local success = pcall(vim.cmd, "edit " .. file_path)
@@ -684,14 +673,14 @@ function Caller.regenerate_graph_from_history(history_entry)
     return
   end
 
-  -- 移动光标到目标位置
+  -- Move cursor to target position
   local pos = history_entry.pos_params.position
   vim.api.nvim_win_set_cursor(0, { pos.line + 1, pos.character })
 
-  -- 使用相应的命令生成调用图
+  -- Use corresponding command to generate call graph
   local opts = vim.deepcopy(require("call_graph").opts)
   local function on_generated_callback(buf_id, root_node_name)
-    -- 更新历史记录中的 buf_id
+    -- Update buf_id in history record
     for i, entry in ipairs(graph_history) do
       if entry == history_entry then
         graph_history[i].buf_id = buf_id
@@ -700,10 +689,10 @@ function Caller.regenerate_graph_from_history(history_entry)
     end
   end
 
-  -- 根据调用图类型生成
+  -- Generate call graph based on call graph type
   Caller.generate_call_graph(opts, history_entry.call_type, on_generated_callback)
 
-  -- 注意：我们不需要恢复原始位置，因为生成的调用图会成为焦点
+  -- Note: We don't need to restore original position, because generated call graph will become focus
 end
 
 function Caller.new_incoming_call(hl_delay_ms, toogle_hl, max_depth)
@@ -748,18 +737,18 @@ function Caller.generate_call_graph(opts, call_type, on_generated_callback)
 
   local function on_graph_generated(root_node, nodes, edges)
     log.debug("[CallGraph] Graph generated")
-    -- 确定是否通过入边遍历
+    -- Determine if traversing through incoming edges
     local traverse_by_incoming = root_node and root_node.incoming_edges and #root_node.incoming_edges > 0
     caller.view:draw(root_node, traverse_by_incoming)
     local buf_id = caller.view.buf.bufid
     vim.notify("[CallGraph] graph generated", vim.log.levels.INFO)
 
-    -- 保存缓冲区ID到caller实例的映射关系
+    -- Save buffer ID to caller instance mapping
     buffer_caller_map[buf_id] = caller
     log.debug("[CallGraph] Added buffer " .. buf_id .. " to buffer-caller map")
 
     local root_node_name = root_node and root_node.text or "UnknownRoot"
-    -- 传递完整的root_node，以便保存位置信息
+    -- Pass full root_node, so position information can be saved
     add_to_history(buf_id, root_node_name, call_type, root_node)
 
     -- Update mermaid file if export is enabled
@@ -817,12 +806,12 @@ end
 
 -- Mark Mode Functions
 function Caller.mark_node_under_cursor()
-  -- 如果不在 mark 模式，自动进入
+  -- If not in mark mode, automatically enter
   if not is_mark_mode_active then
-    -- 记录当前缓冲区
+    -- Record current buffer
     local current_buf = vim.api.nvim_get_current_buf()
 
-    -- 检查buffer_caller_map内容
+    -- Check buffer_caller_map content
     local map_keys = {}
     local has_current_buf = false
     for k, _ in pairs(buffer_caller_map) do
@@ -832,13 +821,13 @@ function Caller.mark_node_under_cursor()
       end
     end
 
-    -- 首先检查当前缓冲区是否存在于映射表中
+    -- First check if current buffer exists in mapping table
     if buffer_caller_map[current_buf] then
-      -- 如果当前缓冲区是已知的图表缓冲区，确保g_caller指向正确的实例
+      -- If current buffer is known graph buffer, ensure g_caller points to correct instance
       g_caller = buffer_caller_map[current_buf]
     end
 
-    -- 检查g_caller是否有效
+    -- Check g_caller validity
     if
       not g_caller
       or not g_caller.view
@@ -849,17 +838,17 @@ function Caller.mark_node_under_cursor()
       return
     end
 
-    -- 检查当前缓冲区是否是g_caller管理的缓冲区
+    -- Check if current buffer is g_caller's managed buffer
     if vim.api.nvim_get_current_buf() ~= g_caller.view.buf.bufid then
       vim.notify("[CallGraph] Mark mode must be started from an active call graph window.", vim.log.levels.WARN)
       return
     end
 
-    -- 进入mark模式
+    -- Enter mark mode
     is_mark_mode_active = true
     marked_node_ids = {}
 
-    -- 获取图表数据
+    -- Get graph data
     if g_caller.view.get_drawn_graph_data then
       local graph_data = g_caller.view:get_drawn_graph_data()
 
@@ -880,33 +869,33 @@ function Caller.mark_node_under_cursor()
 
     vim.notify("[CallGraph] Mark mode started. Use CallGraphMarkNode to select nodes.", vim.log.levels.INFO)
 
-    -- 清除任何可能存在的先前标记
+    -- Clear any previous marks
     if current_graph_view_for_marking and current_graph_view_for_marking.clear_marked_node_highlights then
       current_graph_view_for_marking:clear_marked_node_highlights()
     end
   end
 
-  -- 确保我们在正确的图表缓冲区中
+  -- Ensure we're in the correct graph buffer
   if
     not current_graph_view_for_marking or vim.api.nvim_get_current_buf() ~= current_graph_view_for_marking.buf.bufid
   then
     vim.notify("[CallGraph] Not in the correct call graph window for marking.", vim.log.levels.WARN)
-    is_mark_mode_active = false -- 如果上下文丢失，退出标记模式
+    is_mark_mode_active = false -- If context lost, exit mark mode
     marked_node_ids = {}
     return
   end
 
-  -- 确保有获取光标下节点的方法
+  -- Ensure there's a method to get node at cursor
   if not current_graph_view_for_marking.get_node_at_cursor then
     vim.notify("[CallGraph] Internal error: Cannot get node at cursor (view function missing).", vim.log.levels.ERROR)
     return
   end
 
-  -- 获取光标下的节点
+  -- Get node at cursor
   local node = current_graph_view_for_marking:get_node_at_cursor()
 
   if node and node.nodeid then
-    -- 检查是否已经标记过
+    -- Check if already marked
     local already_marked = false
     for i, id in ipairs(marked_node_ids) do
       if id == node.nodeid then
@@ -917,7 +906,7 @@ function Caller.mark_node_under_cursor()
     end
 
     if not already_marked then
-      -- 如果是第一次标记，直接添加
+      -- If first mark, directly add
       if #marked_node_ids == 0 then
         table.insert(marked_node_ids, node.nodeid)
         vim.notify(
@@ -925,11 +914,11 @@ function Caller.mark_node_under_cursor()
           vim.log.levels.INFO
         )
       else
-        -- 允许与任意已标记节点直接连接的节点被标记
+        -- Allow nodes directly connected to any marked node to be marked
         local can_mark = false
         for _, marked_id in ipairs(marked_node_ids) do
           local marked_node = current_graph_nodes_for_marking[marked_id]
-          -- 检查是否有直接连接（无论方向）
+          -- Check if directly connected (regardless of direction)
           for _, edge in ipairs(marked_node.outcoming_edges) do
             if edge.to_node.nodeid == node.nodeid then
               can_mark = true
@@ -942,7 +931,7 @@ function Caller.mark_node_under_cursor()
               break
             end
           end
-          -- 反向：新节点的出/入边也要检查
+          -- Reverse: New node's out/in edges also need to be checked
           for _, edge in ipairs(node.outcoming_edges) do
             if edge.to_node.nodeid == marked_id then
               can_mark = true
@@ -996,19 +985,19 @@ function Caller.end_mark_mode_and_generate_subgraph()
     return
   end
 
-  -- 获取当前视图
+  -- Get current view
   local current_view = current_graph_view_for_marking
   if not current_view then
     log.warn("No active view found")
     return
   end
 
-  -- 清除原图中的高亮显示
+  -- Clear original graph highlights
   if current_view.clear_marked_node_highlights then
     current_view:clear_marked_node_highlights()
   end
 
-  -- 获取当前图的节点和边数据
+  -- Get current graph's nodes and edges data
   local nodes = current_graph_nodes_for_marking
   local edges = current_graph_edges_for_marking
 
@@ -1017,61 +1006,61 @@ function Caller.end_mark_mode_and_generate_subgraph()
     return
   end
 
-  -- 获取已标记的节点ID
+  -- Get marked node IDs
   local marked_node_ids_array = {}
   for _, node_id in ipairs(marked_node_ids) do
     table.insert(marked_node_ids_array, node_id)
   end
 
   if #marked_node_ids_array < 2 then
-    vim.notify("请至少标记两个节点", vim.log.levels.WARN)
+    vim.notify("Please mark at least two nodes", vim.log.levels.WARN)
     return
   end
 
-  -- 生成子图
+  -- Generate subgraph
   local subgraph = generate_subgraph(marked_node_ids_array, nodes, edges)
   if not subgraph then
-    vim.notify("生成子图失败", vim.log.levels.ERROR)
+    vim.notify("Subgraph generation failed", vim.log.levels.ERROR)
     return
   end
 
-  -- 创建新视图并绘制子图
+  -- Create new view and draw subgraph
   local new_view = CallGraphView:new()
 
-  -- 确定是否通过入边遍历
+  -- Determine if traversing through incoming edges
   local traverse_by_incoming = subgraph.root_node
     and subgraph.root_node.incoming_edges
     and #subgraph.root_node.incoming_edges > 0
 
-  -- 使用子图的根节点作为绘图起点
+  -- Use subgraph's root node as drawing starting point
   new_view:draw(subgraph.root_node, traverse_by_incoming)
 
-  -- 将子图添加到历史记录
+  -- Add subgraph to history
   if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
     local root_node_name = subgraph.root_node.text or "Subgraph"
 
-    -- 深度复制子图结构，确保安全处理
+    -- Deep copy subgraph structure, ensure safe handling
     local subgraph_copy = vim.deepcopy(subgraph)
 
-    -- 验证子图结构的完整性
+    -- Verify subgraph structure completeness
     if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
-      log.warn("子图结构不完整，无法添加到历史记录")
-      vim.notify("[CallGraph] 子图结构不完整，无法保存到历史记录", vim.log.levels.WARN)
+      log.warn("Subgraph structure incomplete, cannot add to history")
+      vim.notify("[CallGraph] Subgraph structure incomplete, cannot save to history", vim.log.levels.WARN)
       return
     end
 
-    -- 确保nodes_map中所有节点ID都是有效的
+    -- Ensure all node IDs in nodes_map are valid
     local fixed_nodes_map = {}
     for id, node in pairs(subgraph_copy.nodes_map) do
       if type(node) == "table" then
         fixed_nodes_map[id] = node
       else
-        log.warn("跳过非表类型的节点: " .. tostring(id))
+        log.warn("Skipping non-table type node: " .. tostring(id))
       end
     end
     subgraph_copy.nodes_map = fixed_nodes_map
 
-    -- 创建一个包含整个子图的历史记录条目
+    -- Create history record entry for entire subgraph
     local history_entry = {
       buf_id = new_view.buf.bufid,
       root_node_name = root_node_name,
@@ -1080,43 +1069,43 @@ function Caller.end_mark_mode_and_generate_subgraph()
       subgraph = subgraph_copy,
     }
 
-    -- 插入到历史记录的开头
+    -- Insert into history at front
     table.insert(graph_history, 1, history_entry)
 
-    -- 如果超出最大历史记录数，移除最老的
+    -- If history exceeds max size, remove oldest
     if #graph_history > max_history_size then
       table.remove(graph_history, #graph_history)
     end
 
-    -- 保存历史到文件
+    -- Save history to file
     save_history_to_file()
 
-    -- 导出mermaid图表，确保用户可以查看最新的图表
+    -- Export mermaid chart, ensure user can view latest chart
     local opts = require("call_graph").opts
     if opts.export_mermaid_graph then
       MermaidGraph.export(subgraph.root_node, mermaid_path)
     end
 
-    vim.notify("[CallGraph] 子图已生成并添加到历史记录", vim.log.levels.INFO)
+    vim.notify("[CallGraph] Subgraph generated and added to history", vim.log.levels.INFO)
   end
 
-  -- 创建新的caller实例
+  -- Create new caller instance
   local new_caller = create_caller(nil, new_view)
 
-  -- 保存原始的g_caller引用
+  -- Save original g_caller reference
   local original_caller = g_caller
 
-  -- 更新全局视图
+  -- Update global view
   g_caller = new_caller
   last_call_type = Caller.CallType.SUBGRAPH_CALL
 
-  -- 保存缓冲区ID到caller实例的映射关系
+  -- Save buffer ID to caller instance mapping
   if new_view.buf and new_view.buf.bufid then
     buffer_caller_map[new_view.buf.bufid] = new_caller
     log.debug("[CallGraph] Added subgraph buffer " .. new_view.buf.bufid .. " to buffer_caller_map")
   end
 
-  -- 确保原始图的缓冲区ID仍然映射到原始的caller实例
+  -- Ensure original graph buffer ID still maps to original caller instance
   if original_caller and original_caller.view and original_caller.view.buf and original_caller.view.buf.bufid then
     buffer_caller_map[original_caller.view.buf.bufid] = original_caller
     log.debug(
@@ -1124,7 +1113,7 @@ function Caller.end_mark_mode_and_generate_subgraph()
     )
   end
 
-  -- 清理标记状态
+  -- Clean mark state
   is_mark_mode_active = false
   marked_node_ids = {}
   current_graph_nodes_for_marking = nil
@@ -1132,7 +1121,7 @@ function Caller.end_mark_mode_and_generate_subgraph()
   current_graph_view_for_marking = nil
 end
 
--- 简化子图生成函数
+-- Simplified subgraph generation function
 function generate_subgraph(marked_node_ids, nodes, edges)
   log.debug("[CallGraph] Generating subgraph for marked nodes")
 
@@ -1141,49 +1130,49 @@ function generate_subgraph(marked_node_ids, nodes, edges)
     return nil
   end
 
-  -- 收集子图的节点和边
+  -- Collect subgraph's nodes and edges
   local subgraph_nodes = {}
   local subgraph_nodes_map = {}
   local subgraph_edges = {}
   local root_node = nil
 
-  -- 添加标记的节点，并构建 nodeid->node 的 map
+  -- Add marked nodes, and build nodeid->node map
   for _, node_id in ipairs(marked_node_ids) do
     if nodes[node_id] then
-      -- 深度复制节点，确保不修改原始数据
+      -- Deep copy node, ensure not modifying original data
       local node_copy = vim.deepcopy(nodes[node_id])
-      -- 重置边的引用
+      -- Reset edge references
       node_copy.incoming_edges = {}
       node_copy.outcoming_edges = {}
-      -- 确保 usr_data 被正确复制
+      -- Ensure usr_data is correctly copied
       if nodes[node_id].usr_data then
         node_copy.usr_data = vim.deepcopy(nodes[node_id].usr_data)
       end
-      -- 确保 pos_params 被正确复制
+      -- Ensure pos_params is correctly copied
       if nodes[node_id].pos_params then
         node_copy.pos_params = vim.deepcopy(nodes[node_id].pos_params)
       end
       subgraph_nodes_map[node_id] = node_copy
       table.insert(subgraph_nodes, node_copy)
 
-      -- 选择level最小的节点作为root_node，或使用第一个节点
+      -- Select level smallest node as root_node, or use first node
       if not root_node or (node_copy.level and (not root_node.level or node_copy.level < root_node.level)) then
         root_node = node_copy
       end
     end
   end
 
-  -- 添加连接标记节点的边，并修正新节点的 in/out edges
+  -- Add connecting marked node edges, and correct new node's in/out edges
   for _, edge in ipairs(edges) do
     local from_id = edge.from_node.nodeid
     local to_id = edge.to_node.nodeid
     if subgraph_nodes_map[from_id] and subgraph_nodes_map[to_id] then
-      -- 重新构建新边，from/to 指向新_nodes
+      -- Rebuild new edges, from/to pointing to new_nodes
       local Edge = require("call_graph.class.edge")
-      -- 深度复制 pos_params
+      -- Deep copy pos_params
       local pos_params = edge.pos_params and vim.deepcopy(edge.pos_params) or nil
 
-      -- 特别处理 sub_edges，确保每个 SubEdge 被正确初始化
+      -- Special handling sub_edges, ensure each SubEdge is correctly initialized
       local sub_edges = {}
       if edge.sub_edges and #edge.sub_edges > 0 then
         local SubEdge = require("call_graph.class.subedge")
@@ -1201,7 +1190,7 @@ function generate_subgraph(marked_node_ids, nodes, edges)
               sub_edge_data.end_row,
               sub_edge_data.end_col
             )
-            -- 确保to_string方法被正确设置
+            -- Ensure to_string method is correctly set
             if not sub_edge.to_string then
               sub_edge.to_string = SubEdge.to_string
             end
@@ -1220,7 +1209,7 @@ function generate_subgraph(marked_node_ids, nodes, edges)
   log.debug("[CallGraph] Generated subgraph with " .. #subgraph_nodes .. " nodes and " .. #subgraph_edges .. " edges")
 
   return {
-    root_node = root_node, -- 返回一个选定的根节点
+    root_node = root_node, -- Return a selected root node
     nodes_map = subgraph_nodes_map,
     nodes_list = subgraph_nodes,
     edges = subgraph_edges,
@@ -1229,105 +1218,105 @@ end
 
 Caller.generate_subgraph = generate_subgraph
 
--- 在初始化时加载历史记录
+-- Initialize load history
 local function init()
   load_history_from_file()
 end
 
--- 在模块加载时执行初始化
+-- Execute initialization when module loads
 init()
 
--- 将 graph_history 更新的函数暴露出去，供测试使用
+-- Expose graph_history update function for testing
 Caller._get_graph_history = function()
   return graph_history
 end
 
 Caller._set_max_history_size = function(size)
   max_history_size = size
-  -- 如果当前历史记录超过了新的大小限制，则裁剪
+  -- If current history exceeds new size limit, trim
   while #graph_history > max_history_size do
     table.remove(graph_history)
   end
 end
 
--- 暴露历史文件路径函数供测试使用
+-- Expose history file path function for testing
 Caller._get_history_file_path_func = function()
   return get_history_file_path
 end
 
--- 暴露 load_history_from_file 供测试使用
+-- Expose load_history_from_file for testing
 Caller.load_history_from_file = load_history_from_file
 
--- 暴露 save_history_to_file 供测试使用
+-- Expose save_history_to_file for testing
 Caller.save_history_to_file = save_history_to_file
 
--- 暴露 add_to_history 供测试使用
+-- Expose add_to_history for testing
 Caller.add_to_history = add_to_history
 
--- 添加清空历史记录的函数
+-- Add clear history function
 function Caller.clear_history()
-  -- 清空内存中的历史记录
+  -- Clear memory history
   graph_history = {}
 
-  -- 获取历史文件路径
+  -- Get history file path
   local file_path = history_file_path()
 
-  -- 尝试清空历史文件（写入空内容）
+  -- Try to clear history file (write empty content)
   local file = io.open(file_path, "w")
   if not file then
-    vim.notify("[CallGraph] 无法打开历史文件进行清空操作: " .. file_path, vim.log.levels.ERROR)
+    vim.notify("[CallGraph] Cannot open history file for clearing operation: " .. file_path, vim.log.levels.ERROR)
     return false
   end
 
-  -- 写入空内容
+  -- Write empty content
   file:write("")
   file:close()
 
-  vim.notify("[CallGraph] 历史记录已清空", vim.log.levels.INFO)
+  vim.notify("[CallGraph] History cleared", vim.log.levels.INFO)
   return true
 end
 
--- 添加退出mark模式的函数
+-- Add exit mark mode function
 function Caller.exit_mark_mode()
-  -- 如果不在mark模式，直接返回
+  -- If not in mark mode, return directly
   if not is_mark_mode_active then
-    vim.notify("[CallGraph] 未处于标记模式", vim.log.levels.INFO)
+    vim.notify("[CallGraph] Not in mark mode", vim.log.levels.INFO)
     return
   end
 
-  -- 获取当前视图
+  -- Get current view
   local current_view = current_graph_view_for_marking
   if current_view and current_view.clear_marked_node_highlights then
-    -- 清除高亮
+    -- Clear highlights
     current_view:clear_marked_node_highlights()
   end
 
-  -- 重置所有mark模式相关状态
+  -- Reset all mark mode related states
   is_mark_mode_active = false
   marked_node_ids = {}
   current_graph_nodes_for_marking = nil
   current_graph_edges_for_marking = nil
   current_graph_view_for_marking = nil
 
-  vim.notify("[CallGraph] 已退出标记模式", vim.log.levels.INFO)
+  vim.notify("[CallGraph] Exited mark mode", vim.log.levels.INFO)
 end
 
---- 创建处理缓冲区切换事件的函数，确保g_caller总是指向当前缓冲区对应的caller实例
----@return function 返回一个用于注册到自动命令的函数
+--- Create buffer switch event handler function, ensure g_caller always points to caller instance corresponding to current buffer
+---@return function Returns a function to register to automatic command
 function Caller.create_buffer_enter_handler()
   return function()
     local current_buf = vim.api.nvim_get_current_buf()
-    -- 记录当前缓冲区信息
+    -- Record current buffer information
     log.debug("Buffer enter event for buffer: " .. current_buf)
 
-    -- 记录当前buffer_caller_map的状态
+    -- Record current buffer_caller_map state
     local map_keys = {}
     for k, _ in pairs(buffer_caller_map) do
       table.insert(map_keys, k)
     end
     log.debug("buffer_caller_map keys: " .. vim.inspect(map_keys))
 
-    -- 如果当前缓冲区有对应的caller实例，则更新g_caller
+    -- If current buffer has corresponding caller instance, update g_caller
     if buffer_caller_map[current_buf] then
       local old_bufid = g_caller and g_caller.view and g_caller.view.buf and g_caller.view.buf.bufid or "nil"
       g_caller = buffer_caller_map[current_buf]
