@@ -128,14 +128,14 @@ function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
     log.error("end_col is not a number: " .. tostring(end_col))
     return
   end
-  
+
   -- 确保start_col <= end_col
   if start_col > end_col then
     log.error(string.format("Invalid column range: start_col=%d > end_col=%d", start_col, end_col))
     -- 交换两个值以避免断言失败
     start_col, end_col = end_col, start_col
   end
-  
+
   assert(start_col <= end_col, string.format("start_col: %d, end_col: %d", start_col, end_col))
 
   local length = end_col - start_col

@@ -12,9 +12,9 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
   local defaultConfig = {
     buf = {
       bufid = -1,
-      graph = nil,                                                                      -- This seems to be used for buffer specific graph state, might not be nodes/edges directly
+      graph = nil, -- This seems to be used for buffer specific graph state, might not be nodes/edges directly
     },
-    namespace_id = vim.api.nvim_create_namespace("call_graph"),                         -- for edge highlight
+    namespace_id = vim.api.nvim_create_namespace("call_graph"), -- for edge highlight
     marked_node_namespace_id = vim.api.nvim_create_namespace("call_graph_marked_node"), -- for marked node highlight
     hl_delay_ms = hl_delay_ms or 200,
     toggle_auto_hl = toogle_hl,
@@ -26,7 +26,7 @@ function CallGraphView:new(hl_delay_ms, toogle_hl)
     view_id = self.view_id,
     nodes_cache = {}, -- Cache for drawn nodes (map: nodeid -> node object)
     edges_cache = {}, -- Cache for drawn edges (list or map)
-    drawer = nil,     -- Will be set later by draw method for GraphDrawer instance
+    drawer = nil, -- Will be set later by draw method for GraphDrawer instance
   }
   self.view_id = self.view_id + 1
   local o = setmetatable(defaultConfig, CallGraphView)
@@ -86,7 +86,7 @@ function CallGraphView:clear_view()
     edge = {},
     marked_nodes = {},
   }
-  
+
   -- 不要清除缓存，而是保留它们
   -- self.nodes_cache = {}
   -- self.edges_cache = {}
@@ -131,8 +131,8 @@ end
 local function overlap_edge(row, col, edge)
   for _, sub_edge in ipairs(edge.sub_edges or {}) do
     if
-        (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col)
-        or (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row)
+      (row == sub_edge.start_row and sub_edge.start_col <= col and col < sub_edge.end_col)
+      or (col == sub_edge.start_col and sub_edge.start_row <= row and row < sub_edge.end_row)
     then
       return true
     end
@@ -172,7 +172,7 @@ local function jumpto(pos_params)
   vim.cmd("edit " .. file_path)
   -- 如果有位置信息，则跳转到指定位置
   if pos_params.position then
-    local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+    local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
     local character = pos_params.position.character -- Neovim 的列号从 1 开始
     vim.api.nvim_win_set_cursor(0, { line, character })
   end
@@ -372,7 +372,7 @@ local function show_node_info(row, col, ctx)
 
     local pos_params = fnode.attr.pos_params
     local uri = pos_params.textDocument.uri
-    local line = pos_params.position.line + 1       -- Neovim 的行号从 0 开始
+    local line = pos_params.position.line + 1 -- Neovim 的行号从 0 开始
     local character = pos_params.position.character -- Neovim 的列号从 1 开始
     local file_path = vim.uri_to_fname(uri)
     local text = string.format("%s:%d:%d", file_path, line, character)
@@ -469,7 +469,7 @@ local function draw_edge_cb(edge, ctx)
   end
   target_e.sub_edges = edge.sub_edges
   log.info("setup edge", target_e:to_string(), "sub edges")
-  
+
   -- 更新 edges_cache
   if ctx.self and ctx.self.edges_cache then
     for i, cached_edge in ipairs(ctx.self.edges_cache) do
@@ -505,31 +505,31 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
   -- 从root_node开始遍历构建完整的节点和边集合
   local nodes_map = {}
   local edges_list = {}
-  
+
   -- 递归收集所有可达的节点和边
   local function collect_nodes_and_edges(node, visited)
     if not node or visited[node.nodeid] then
       return
     end
-    
+
     -- 标记当前节点为已访问
     visited[node.nodeid] = true
     -- 添加到节点集合
     nodes_map[node.nodeid] = node
-    
+
     -- 获取要遍历的边
     local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
-    
+
     -- 处理每条边
     for _, edge in ipairs(edges or {}) do
       -- 添加到边集合
       table.insert(edges_list, edge)
-      
+
       -- 递归处理下一个节点
       local next_node = traverse_by_incoming and edge.from_node or edge.to_node
       collect_nodes_and_edges(next_node, visited)
     end
-    
+
     -- 确保另一方向的边也被记录（虽然不用于遍历）
     local other_edges = traverse_by_incoming and node.outcoming_edges or node.incoming_edges
     for _, edge in ipairs(other_edges or {}) do
@@ -537,12 +537,12 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
       table.insert(edges_list, edge)
     end
   end
-  
+
   -- 只有当root_node不为nil时才收集节点和边
   if root_node then
     collect_nodes_and_edges(root_node, {})
   end
-  
+
   -- 缓存构建的节点和边数据
   self.nodes_cache = nodes_map
   self.edges_cache = edges_list
@@ -571,7 +571,7 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
     cb_ctx = { edges = edges_list, self = self },
   })
   self.buf.graph:set_modifiable(true)
-  
+
   -- 设置 GraphDrawer 的节点集
   self.buf.graph.nodes = self.nodes_cache
 
@@ -588,7 +588,11 @@ end
 
 -- New function to get node at current cursor line
 function CallGraphView:get_node_at_cursor()
-  if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) or vim.api.nvim_get_current_buf() ~= self.buf.bufid then
+  if
+    self.buf.bufid == -1
+    or not vim.api.nvim_buf_is_valid(self.buf.bufid)
+    or vim.api.nvim_get_current_buf() ~= self.buf.bufid
+  then
     log.warn("get_node_at_cursor: Not in the correct buffer or buffer invalid.")
     return nil
   end
@@ -604,16 +608,31 @@ function CallGraphView:get_node_at_cursor()
   end
 
   for _, node in pairs(self.nodes_cache) do -- nodes_cache is a map {nodeid = node_obj}
-    if node.row == current_row_zero_indexed and 
-       current_col_one_indexed >= node.col and 
-       current_col_one_indexed < node.col + #node.text then
-      log.debug(string.format("Node found at line %d, col %d: %s (ID: %d)", 
-        current_line_one_indexed, current_col_one_indexed, node.text, node.nodeid))
+    if
+      node.row == current_row_zero_indexed
+      and current_col_one_indexed >= node.col
+      and current_col_one_indexed < node.col + #node.text
+    then
+      log.debug(
+        string.format(
+          "Node found at line %d, col %d: %s (ID: %d)",
+          current_line_one_indexed,
+          current_col_one_indexed,
+          node.text,
+          node.nodeid
+        )
+      )
       return node
     end
   end
-  log.debug(string.format("No node found at line %d, col %d (row %d)", 
-    current_line_one_indexed, current_col_one_indexed, current_row_zero_indexed))
+  log.debug(
+    string.format(
+      "No node found at line %d, col %d (row %d)",
+      current_line_one_indexed,
+      current_col_one_indexed,
+      current_row_zero_indexed
+    )
+  )
   return nil
 end
 
@@ -638,19 +657,32 @@ function CallGraphView:apply_marked_node_highlights(marked_node_ids_list)
 
   for node_id, node in pairs(self.nodes_cache) do
     if marked_ids_set[node_id] then
-      log.debug(string.format("Highlighting marked node: %s (ID: %d) at row %d, col %d", node.text, node.nodeid, node
-      .row, node.col))
+      log.debug(
+        string.format(
+          "Highlighting marked node: %s (ID: %d) at row %d, col %d",
+          node.text,
+          node.nodeid,
+          node.row,
+          node.col
+        )
+      )
       -- Ensure node.col and node.text are valid
       if node.row ~= nil and node.col ~= nil and node.text ~= nil then
-        local mark_id = vim.api.nvim_buf_set_extmark(self.buf.bufid, self.marked_node_namespace_id, node.row, node.col, {
-          end_col = node.col + #node.text,
-          hl_group = "CallGraphMarkedNode",
-          priority = 110,                                      -- Higher than edge highlights (typically 100 or default)
-        })
-        table.insert(self.ext_marks_id.marked_nodes, mark_id)  -- Optional, if needed for individual management
+        local mark_id =
+          vim.api.nvim_buf_set_extmark(self.buf.bufid, self.marked_node_namespace_id, node.row, node.col, {
+            end_col = node.col + #node.text,
+            hl_group = "CallGraphMarkedNode",
+            priority = 110, -- Higher than edge highlights (typically 100 or default)
+          })
+        table.insert(self.ext_marks_id.marked_nodes, mark_id) -- Optional, if needed for individual management
       else
-        log.warn(string.format("Cannot highlight node %s (ID: %d) due to missing row/col/text info.", node.text or "N/A",
-          node.nodeid or -1))
+        log.warn(
+          string.format(
+            "Cannot highlight node %s (ID: %d) due to missing row/col/text info.",
+            node.text or "N/A",
+            node.nodeid or -1
+          )
+        )
       end
     end
   end
@@ -659,8 +691,8 @@ end
 -- New function to get currently drawn graph data
 function CallGraphView:get_drawn_graph_data()
   return {
-    nodes = self.nodes_cache,     -- This should be the map {nodeid = node_obj}
-    edges = self.edges_cache,     -- This should be the list/map of edge objects
+    nodes = self.nodes_cache, -- This should be the map {nodeid = node_obj}
+    edges = self.edges_cache, -- This should be the list/map of edge objects
   }
 end
 

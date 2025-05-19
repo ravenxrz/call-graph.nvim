@@ -77,13 +77,13 @@ function BaseCallGraphData:find_buf_client(method)
     log.warn("No LSP clients found for buffer " .. bufnr)
     return nil
   end
-  
+
   -- 1. 在日志中输出所有可用的客户端信息
   log.info("Found " .. #clients .. " LSP clients for buffer " .. bufnr)
   for i, c in ipairs(clients) do
     log.info(string.format("Client %d: id=%d, name=%s", i, c.id, c.name or "unknown"))
   end
-  
+
   -- 2. 更强大的客户端支持检测方法
   for _, c in ipairs(clients) do
     -- 检查是否有supports_method函数
@@ -105,13 +105,13 @@ function BaseCallGraphData:find_buf_client(method)
       end
     end
   end
-  
+
   -- 3. 兜底方案：如果找不到支持的客户端，但这是incoming calls请求，尝试使用第一个客户端
   if method == "callHierarchy/incomingCalls" and #clients > 0 then
     log.warn("No client explicitly supports " .. method .. ", but trying with first client as fallback")
     return clients[1]
   end
-  
+
   log.warn("No LSP client found that supports method: " .. method)
   return nil
 end

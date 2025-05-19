@@ -21,7 +21,7 @@ end
 vim.notify = function(msg, level)
   table.insert(M.notify_calls, {
     msg = msg,
-    level = level or vim.log.levels.INFO
+    level = level or vim.log.levels.INFO,
   })
 end
 
@@ -30,7 +30,7 @@ vim.ui = vim.ui or {}
 vim.ui.select = function(items, opts, on_choice)
   table.insert(M.select_calls, {
     items = items,
-    opts = opts
+    opts = opts,
   })
   -- 默认选择第一个选项
   if on_choice and items and #items > 0 then
@@ -59,7 +59,7 @@ vim.log.levels = vim.log.levels or {
   DEBUG = 0,
   INFO = 1,
   WARN = 2,
-  ERROR = 3
+  ERROR = 3,
 }
 
-return M 
+return M
