@@ -39,13 +39,71 @@ local function save_history_to_file()
   -- 创建要保存的数据结构（只保存必要信息，不包括临时的 buf_id）
   local data_to_save = {}
   for _, entry in ipairs(graph_history) do
-    if entry.pos_params then  -- 只保存有位置参数的条目
-      table.insert(data_to_save, {
-        root_node_name = entry.root_node_name,
-        call_type = entry.call_type,
-        timestamp = entry.timestamp,
-        pos_params = entry.pos_params
-      })
+    local history_item = {
+      root_node_name = entry.root_node_name,
+      call_type = entry.call_type,
+      timestamp = entry.timestamp
+    }
+    
+    -- 处理常规图形（通过pos_params重新生成）
+    if entry.pos_params then
+      history_item.pos_params = entry.pos_params
+    end
+    
+    -- 处理子图（保存完整结构，但需要处理循环引用）
+    if entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph then
+      -- 深度复制子图结构，以便我们可以安全地修改它而不影响原始数据
+      local subgraph_copy = vim.deepcopy(entry.subgraph)
+      
+      -- 创建节点索引表，用于后续重建引用
+      local node_indices = {}
+      for id, node in pairs(subgraph_copy.nodes_map) do
+        node_indices[node] = id
+      end
+      
+      -- 处理节点的边引用（移除循环引用）
+      for _, node in pairs(subgraph_copy.nodes_map) do
+        -- 存储边的ID引用而不是直接对象引用
+        local incoming_edge_ids = {}
+        for _, edge in ipairs(node.incoming_edges or {}) do
+          table.insert(incoming_edge_ids, edge.edgeid)
+        end
+        node.incoming_edge_ids = incoming_edge_ids
+        node.incoming_edges = nil
+        
+        local outcoming_edge_ids = {}
+        for _, edge in ipairs(node.outcoming_edges or {}) do
+          table.insert(outcoming_edge_ids, edge.edgeid)
+        end
+        node.outcoming_edge_ids = outcoming_edge_ids
+        node.outcoming_edges = nil
+      end
+      
+      -- 处理边的节点引用（用ID替换对象引用）
+      for i, edge in ipairs(subgraph_copy.edges or {}) do
+        if edge.from_node and node_indices[edge.from_node] then
+          edge.from_node_id = node_indices[edge.from_node]
+          edge.from_node = nil
+        end
+        
+        if edge.to_node and node_indices[edge.to_node] then
+          edge.to_node_id = node_indices[edge.to_node]
+          edge.to_node = nil
+        end
+      end
+      
+      -- 处理根节点引用
+      if subgraph_copy.root_node and node_indices[subgraph_copy.root_node] then
+        subgraph_copy.root_node_id = node_indices[subgraph_copy.root_node]
+        subgraph_copy.root_node = nil
+      end
+      
+      history_item.subgraph = subgraph_copy
+    end
+    
+    -- 只保存有位置参数或子图数据的条目
+    if entry.pos_params or (entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph) then
+      table.insert(data_to_save, history_item)
     end
   end
   
@@ -96,14 +154,103 @@ local function load_history_from_file()
   -- 将加载的数据转换为历史记录格式（初始化 buf_id 为无效值）
   graph_history = {}
   for _, entry in ipairs(data) do
-    if entry.pos_params and entry.root_node_name and entry.call_type then
-      table.insert(graph_history, {
+    if entry.root_node_name and entry.call_type then
+      local history_item = {
         buf_id = -1,  -- 初始化为无效值，在生成图时会更新
         root_node_name = entry.root_node_name,
         call_type = entry.call_type,
-        timestamp = entry.timestamp or os.time(),
-        pos_params = entry.pos_params
-      })
+        timestamp = entry.timestamp or os.time()
+      }
+      
+      -- 加载常规图的位置参数
+      if entry.pos_params then
+        history_item.pos_params = entry.pos_params
+      end
+      
+      -- 加载子图结构并重建对象引用关系
+      if entry.call_type == Caller.CallType.SUBGRAPH_CALL and entry.subgraph then
+        local subgraph = entry.subgraph
+        
+        -- 首先确保所有边都有一个edgeid
+        for i, edge in ipairs(subgraph.edges or {}) do
+          if not edge.edgeid then
+            edge.edgeid = i  -- 如果没有edgeid，使用索引作为edgeid
+          end
+        end
+        
+        -- 创建边ID到边对象的映射
+        local edge_map = {}
+        for _, edge in ipairs(subgraph.edges or {}) do
+          edge_map[edge.edgeid] = edge
+        end
+        
+        -- 重建边和节点之间的引用
+        for id, node in pairs(subgraph.nodes_map or {}) do
+          -- 确保 node 是表类型
+          if type(node) == "table" then
+            -- 重建入边引用
+            node.incoming_edges = {}
+            -- 安全地获取入边ID列表
+            local incoming_edge_ids = node.incoming_edge_ids or {}
+            if type(incoming_edge_ids) == "table" then
+              for _, edge_id in ipairs(incoming_edge_ids) do
+                if edge_map[edge_id] then
+                  table.insert(node.incoming_edges, edge_map[edge_id])
+                end
+              end
+            end
+            node.incoming_edge_ids = nil
+            
+            -- 重建出边引用
+            node.outcoming_edges = {}
+            -- 安全地获取出边ID列表
+            local outcoming_edge_ids = node.outcoming_edge_ids or {}
+            if type(outcoming_edge_ids) == "table" then  
+              for _, edge_id in ipairs(outcoming_edge_ids) do
+                if edge_map[edge_id] then
+                  table.insert(node.outcoming_edges, edge_map[edge_id])
+                end
+              end
+            end
+            node.outcoming_edge_ids = nil
+          else
+            -- 如果节点不是表类型，创建一个空的节点结构
+            log.warn("[CallGraph] Node with ID " .. tostring(id) .. " is not a table type: " .. type(node))
+            subgraph.nodes_map[id] = {
+              nodeid = id,
+              text = "Invalid Node " .. tostring(id),
+              incoming_edges = {},
+              outcoming_edges = {}
+            }
+          end
+        end
+        
+        -- 重建边对节点的引用
+        for _, edge in ipairs(subgraph.edges or {}) do
+          if edge.from_node_id and subgraph.nodes_map and subgraph.nodes_map[edge.from_node_id] then
+            edge.from_node = subgraph.nodes_map[edge.from_node_id]
+            edge.from_node_id = nil
+          end
+          
+          if edge.to_node_id and subgraph.nodes_map and subgraph.nodes_map[edge.to_node_id] then
+            edge.to_node = subgraph.nodes_map[edge.to_node_id]
+            edge.to_node_id = nil
+          end
+        end
+        
+        -- 重建根节点引用
+        if subgraph.root_node_id and subgraph.nodes_map and subgraph.nodes_map[subgraph.root_node_id] then
+          subgraph.root_node = subgraph.nodes_map[subgraph.root_node_id]
+          subgraph.root_node_id = nil
+        end
+        
+        history_item.subgraph = subgraph
+      end
+      
+      -- 只添加有用的条目（有位置参数或子图）
+      if history_item.pos_params or (entry.call_type == Caller.CallType.SUBGRAPH_CALL and history_item.subgraph) then
+        table.insert(graph_history, history_item)
+      end
     end
   end
   
@@ -240,6 +387,31 @@ end
 --- 从历史记录重新生成调用图
 ---@param history_entry table 历史记录条目
 function Caller.regenerate_graph_from_history(history_entry)
+  -- 对于子图，直接从保存的子图结构重新生成
+  if history_entry.call_type == Caller.CallType.SUBGRAPH_CALL and history_entry.subgraph then
+    local subgraph = history_entry.subgraph
+    
+    -- 创建新视图并绘制子图
+    local new_view = CallGraphView:new()
+    
+    -- 确定是否通过入边遍历
+    local traverse_by_incoming = subgraph.root_node and subgraph.root_node.incoming_edges and #(subgraph.root_node.incoming_edges) > 0
+    
+    -- 使用子图的根节点作为绘图起点
+    new_view:draw(subgraph.root_node, traverse_by_incoming)
+    
+    -- 更新全局视图
+    g_caller = create_caller(nil, new_view)
+    last_call_type = Caller.CallType.SUBGRAPH_CALL
+    
+    -- 更新历史记录中的buf_id
+    history_entry.buf_id = new_view.buf.bufid
+    
+    vim.notify("[CallGraph] 子图已从历史记录重新加载", vim.log.levels.INFO)
+    return
+  end
+  
+  -- 对于常规图，使用pos_params重新生成
   if not history_entry or not history_entry.pos_params then
     vim.notify("[CallGraph] Cannot regenerate graph: missing position data", vim.log.levels.ERROR)
     return
@@ -625,6 +797,33 @@ function Caller.end_mark_mode_and_generate_subgraph()
 
   -- 更新全局视图
   g_caller.view = new_view
+
+  -- 将子图添加到历史记录
+  if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
+    local root_node_name = subgraph.root_node.text or "Subgraph"
+    
+    -- 创建一个包含整个子图的历史记录条目
+    local history_entry = {
+      buf_id = new_view.buf.bufid,
+      root_node_name = root_node_name,
+      call_type = Caller.CallType.SUBGRAPH_CALL,
+      timestamp = os.time(),
+      subgraph = vim.deepcopy(subgraph)  -- 保存整个子图结构而不仅是位置参数
+    }
+    
+    -- 插入到历史记录的开头
+    table.insert(graph_history, 1, history_entry)
+    
+    -- 如果超出最大历史记录数，移除最老的
+    if #graph_history > max_history_size then
+      table.remove(graph_history, #graph_history)
+    end
+    
+    -- 保存历史到文件
+    save_history_to_file()
+    
+    vim.notify("[CallGraph] 子图已生成并添加到历史记录", vim.log.levels.INFO)
+  end
 
   -- 清理标记状态
   is_mark_mode_active = false
