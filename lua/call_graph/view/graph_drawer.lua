@@ -119,6 +119,23 @@ end
 --- @param end_col integer, end of cold , exclusive
 --- @param direction string, which direction
 function GraphDrawer:draw_h_line(row, start_col, end_col, direction)
+  -- 增强错误检查
+  if type(start_col) ~= "number" then
+    log.error("start_col is not a number: " .. tostring(start_col))
+    return
+  end
+  if type(end_col) ~= "number" then
+    log.error("end_col is not a number: " .. tostring(end_col))
+    return
+  end
+  
+  -- 确保start_col <= end_col
+  if start_col > end_col then
+    log.error(string.format("Invalid column range: start_col=%d > end_col=%d", start_col, end_col))
+    -- 交换两个值以避免断言失败
+    start_col, end_col = end_col, start_col
+  end
+  
   assert(start_col <= end_col, string.format("start_col: %d, end_col: %d", start_col, end_col))
 
   local length = end_col - start_col
@@ -294,6 +311,20 @@ local function draw_edge(self, from_node, to_node, lhs_level_max_col)
 end
 
 function GraphDrawer:draw(root_node, traverse_by_incoming)
+  if (not root_node) and (not self.nodes or next(self.nodes) == nil) then
+    -- 没有根节点且没有任何节点，直接返回
+    return
+  end
+  if not root_node then
+    -- 如果没有指定根节点，选择第一个节点作为根节点
+    for _, node in pairs(self.nodes) do
+      root_node = node
+      break
+    end
+  end
+  if not root_node then
+    return
+  end
   local queue = { root_node } -- for bfs
   local cur_level = 1
   local cur_level_nodes = {}
