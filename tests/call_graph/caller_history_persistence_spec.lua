@@ -1,5 +1,8 @@
 local Caller = require("call_graph.caller")
 local base_mock = require("tests.base_mock")
+local mock = require("luassert.mock")
+
+print("开始执行 caller_history_persistence_spec.lua 测试")
 
 describe("Call Graph History Persistence", function()
   local original_io_open = io.open
@@ -195,4 +198,6 @@ describe("Call Graph History Persistence", function()
       assert.equals("function_3", history[3].root_node_name)
     end)
   end)
-end) 
+end)
+
+print("结束执行 caller_history_persistence_spec.lua 测试") 
