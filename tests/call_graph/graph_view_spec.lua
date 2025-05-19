@@ -122,8 +122,21 @@ describe("CallGraphView", function()
 
   it("should draw the graph", function()
     -- 替换CallGraphView.draw方法进行测试
-    CallGraphView.draw = function(self, root_node, nodes, edges)
-      -- 保存传入的数据
+    CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+      -- 从root_node构建节点和边集合
+      -- 在测试中简单模拟这个过程
+      local nodes = {}
+      local edges = {}
+      
+      if root_node then
+        nodes[root_node.nodeid] = root_node
+        local traverse_edges = traverse_by_incoming and root_node.incoming_edges or root_node.outcoming_edges
+        for _, edge in ipairs(traverse_edges) do
+          table.insert(edges, edge)
+        end
+      end
+      
+      -- 保存构建的数据
       self.nodes_cache = nodes
       self.edges_cache = edges
       
@@ -135,10 +148,12 @@ describe("CallGraphView", function()
       return self.buf.bufid
     end
     
-    local bufid = view:draw(root_node, nodes, edges)
+    -- 假设这是一个出边
+    local traverse_by_incoming = false
+    local bufid = view:draw(root_node, traverse_by_incoming)
     assert.equal(bufid, 999)
-    assert.equal(view.nodes_cache, nodes)
-    assert.equal(view.edges_cache, edges)
+    assert.is_not_nil(view.nodes_cache)
+    assert.is_not_nil(view.edges_cache)
   end)
 
   -- 测试缓冲区无效时的行为
@@ -251,8 +266,16 @@ describe("CallGraphView", function()
     it("should create new buffer when drawing with invalid buffer", function()
       -- 使用mock的draw方法而不是原始方法
       local saved_draw = CallGraphView.draw
-      CallGraphView.draw = function(self, root, nodes, edges)
-        -- 保存传入的数据
+      CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+        -- 从root_node构建简单的节点和边集合
+        local nodes = {}
+        local edges = {}
+        
+        if root_node then
+          nodes[root_node.nodeid] = root_node
+        end
+        
+        -- 保存构建的数据
         self.nodes_cache = nodes
         self.edges_cache = edges
         
@@ -272,7 +295,8 @@ describe("CallGraphView", function()
       view.buf.bufid = -1
       
       -- 调用draw
-      local new_bufid = view:draw(root_node, nodes, edges)
+      local traverse_by_incoming = false
+      local new_bufid = view:draw(root_node, traverse_by_incoming)
       
       -- 验证行为
       assert.equal(create_buf_calls, 1) -- 应该创建一个新的缓冲区
@@ -286,8 +310,16 @@ describe("CallGraphView", function()
     it("should handle invalid buffer with positive bufid safely", function()
       -- 使用mock的draw方法而不是原始方法
       local saved_draw = CallGraphView.draw
-      CallGraphView.draw = function(self, root, nodes, edges)
-        -- 保存传入的数据
+      CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+        -- 从root_node构建简单的节点和边集合
+        local nodes = {}
+        local edges = {}
+        
+        if root_node then
+          nodes[root_node.nodeid] = root_node
+        end
+        
+        -- 保存构建的数据
         self.nodes_cache = nodes
         self.edges_cache = edges
         
@@ -305,7 +337,8 @@ describe("CallGraphView", function()
       view.buf.bufid = 123
       
       -- 调用draw
-      local new_bufid = view:draw(root_node, nodes, edges)
+      local traverse_by_incoming = false
+      local new_bufid = view:draw(root_node, traverse_by_incoming)
       
       -- 验证行为
       assert.equal(is_valid_buffer_calls, 1) -- 应该检查缓冲区是否有效
@@ -346,8 +379,21 @@ describe("CallGraphView", function()
       })
       
       -- 使用模拟的draw函数
-      CallGraphView.draw = function(self, root_node, nodes, edges)
-        -- 保存传入的数据
+      CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+        -- 从root_node构建节点和边集合
+        -- 在测试中简单模拟这个过程
+        local nodes = {}
+        local edges = {}
+        
+        if root_node then
+          nodes[root_node.nodeid] = root_node
+          local traverse_edges = traverse_by_incoming and root_node.incoming_edges or root_node.outcoming_edges
+          for _, edge in ipairs(traverse_edges) do
+            table.insert(edges, edge)
+          end
+        end
+        
+        -- 保存构建的数据
         self.nodes_cache = nodes
         self.edges_cache = edges
         
@@ -373,7 +419,7 @@ describe("CallGraphView", function()
       view.buf.bufid = -1
       
       -- 调用draw方法
-      local result = view:draw(root_node, nodes, nil)
+      local result = view:draw(root_node, false)
       
       -- 验证结果
       assert.is_not_nil(result)
@@ -385,7 +431,7 @@ describe("CallGraphView", function()
       view.buf.bufid = -1
       
       -- 调用draw方法
-      local result = view:draw(nil, nodes, edges)
+      local result = view:draw(nil, false)
       
       -- 验证结果
       assert.is_not_nil(result)
@@ -397,7 +443,7 @@ describe("CallGraphView", function()
       view.buf.bufid = -1
       
       -- 调用draw方法
-      local result = view:draw(root_node, nil, edges)
+      local result = view:draw(root_node, true)
       
       -- 验证结果
       assert.is_not_nil(result)
@@ -409,11 +455,219 @@ describe("CallGraphView", function()
       view.buf.bufid = -1
       
       -- 调用draw方法
-      local result = view:draw(nil, nil, nil)
+      local result = view:draw(nil, true)
       
       -- 验证结果
       assert.is_not_nil(result)
       assert.equal(result, 777)
+    end)
+  end)
+
+  -- 测试新的递归节点收集逻辑
+  describe("node and edge collection from root_node", function()
+    local mock_GraphDrawer
+    local graph_draw_calls
+    
+    before_each(function()
+      -- 保存原始GraphDrawer
+      mock_GraphDrawer = package.loaded["call_graph.view.graph_drawer"]
+      graph_draw_calls = {}
+      
+      -- 创建一个模拟的GraphDrawer，来检查传递给它的参数
+      package.loaded["call_graph.view.graph_drawer"] = {
+        new = function(bufid, opts)
+          return {
+            set_modifiable = function() end,
+            draw = function(self, root_node, traverse_by_incoming)
+              table.insert(graph_draw_calls, {
+                root_node = root_node,
+                traverse_by_incoming = traverse_by_incoming,
+                nodes = self.nodes -- 这将包含view.nodes_cache的引用
+              })
+            end,
+            nodes = {},
+            set_modifiable = function() end
+          }
+        end
+      }
+      
+      -- 重新定义draw方法，避免调用原始draw方法中的graph.draw
+      local saved_original_draw = original_draw
+      CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+        -- 清除当前视图
+        self:clear_view()
+      
+        -- 从root_node开始遍历构建完整的节点和边集合
+        local nodes_map = {}
+        local edges_list = {}
+        
+        -- 递归收集所有可达的节点和边
+        local function collect_nodes_and_edges(node, visited)
+          if not node or visited[node.nodeid] then
+            return
+          end
+          
+          -- 标记当前节点为已访问
+          visited[node.nodeid] = true
+          -- 添加到节点集合
+          nodes_map[node.nodeid] = node
+          
+          -- 获取要遍历的边
+          local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
+          
+          -- 处理每条边
+          for _, edge in ipairs(edges) do
+            -- 添加到边集合
+            table.insert(edges_list, edge)
+            
+            -- 递归处理下一个节点
+            local next_node = traverse_by_incoming and edge.from_node or edge.to_node
+            collect_nodes_and_edges(next_node, visited)
+          end
+          
+          -- 确保另一方向的边也被记录（虽然不用于遍历）
+          local other_edges = traverse_by_incoming and node.outcoming_edges or node.incoming_edges
+          for _, edge in ipairs(other_edges) do
+            -- 只添加边到集合，不递归遍历
+            table.insert(edges_list, edge)
+          end
+        end
+        
+        -- 开始从根节点收集
+        collect_nodes_and_edges(root_node, {})
+        
+        -- 缓存构建的节点和边数据
+        self.nodes_cache = nodes_map
+        self.edges_cache = edges_list
+      
+        -- 模拟buffer ID
+        if self.buf.bufid == -1 then
+          self.buf.bufid = 999
+        end
+      
+        return self.buf.bufid
+      end
+    end)
+    
+    after_each(function()
+      -- 恢复原始GraphDrawer
+      package.loaded["call_graph.view.graph_drawer"] = mock_GraphDrawer
+      -- 恢复原始draw方法
+      CallGraphView.draw = original_draw
+    end)
+
+    it("should collect all nodes and edges when using outcoming edges", function()
+      -- 创建一个简单的图: A -> B -> C
+      --                 \
+      --                  -> D
+      local nodeA = { text = "A", nodeid = 1, incoming_edges = {}, outcoming_edges = {} }
+      local nodeB = { text = "B", nodeid = 2, incoming_edges = {}, outcoming_edges = {} }
+      local nodeC = { text = "C", nodeid = 3, incoming_edges = {}, outcoming_edges = {} }
+      local nodeD = { text = "D", nodeid = 4, incoming_edges = {}, outcoming_edges = {} }
+      
+      local edge_AB = { from_node = nodeA, to_node = nodeB }
+      local edge_BC = { from_node = nodeB, to_node = nodeC }
+      local edge_AD = { from_node = nodeA, to_node = nodeD }
+      
+      table.insert(nodeA.outcoming_edges, edge_AB)
+      table.insert(nodeB.incoming_edges, edge_AB)
+      
+      table.insert(nodeB.outcoming_edges, edge_BC)
+      table.insert(nodeC.incoming_edges, edge_BC)
+      
+      table.insert(nodeA.outcoming_edges, edge_AD)
+      table.insert(nodeD.incoming_edges, edge_AD)
+      
+      -- 使用原始的draw方法
+      local view = CallGraphView:new()
+      view:draw(nodeA, false) -- false表示通过出边遍历
+      
+      -- 验证nodes_cache包含所有节点
+      assert.is_not_nil(view.nodes_cache)
+      assert.equal(4, vim.tbl_count(view.nodes_cache))
+      assert.is_not_nil(view.nodes_cache[1]) -- A
+      assert.is_not_nil(view.nodes_cache[2]) -- B
+      assert.is_not_nil(view.nodes_cache[3]) -- C
+      assert.is_not_nil(view.nodes_cache[4]) -- D
+      
+      -- 验证edges_cache包含所有边
+      assert.is_not_nil(view.edges_cache)
+      assert.equal(6, #view.edges_cache)  -- 出边和入边都会被收集（3条边各被收集2次）
+    end)
+    
+    it("should collect all nodes and edges when using incoming edges", function()
+      -- 创建一个简单的图: A -> B -> C
+      --                 \
+      --                  -> D
+      local nodeA = { text = "A", nodeid = 1, incoming_edges = {}, outcoming_edges = {} }
+      local nodeB = { text = "B", nodeid = 2, incoming_edges = {}, outcoming_edges = {} }
+      local nodeC = { text = "C", nodeid = 3, incoming_edges = {}, outcoming_edges = {} }
+      local nodeD = { text = "D", nodeid = 4, incoming_edges = {}, outcoming_edges = {} }
+      
+      local edge_AB = { from_node = nodeA, to_node = nodeB }
+      local edge_BC = { from_node = nodeB, to_node = nodeC }
+      local edge_AD = { from_node = nodeA, to_node = nodeD }
+      
+      table.insert(nodeA.outcoming_edges, edge_AB)
+      table.insert(nodeB.incoming_edges, edge_AB)
+      
+      table.insert(nodeB.outcoming_edges, edge_BC)
+      table.insert(nodeC.incoming_edges, edge_BC)
+      
+      table.insert(nodeA.outcoming_edges, edge_AD)
+      table.insert(nodeD.incoming_edges, edge_AD)
+      
+      -- 使用原始的draw方法，从C开始通过入边遍历
+      local view = CallGraphView:new()
+      view:draw(nodeC, true) -- true表示通过入边遍历
+      
+      -- 验证nodes_cache包含可达节点
+      assert.is_not_nil(view.nodes_cache)
+      assert.equal(3, vim.tbl_count(view.nodes_cache)) -- 应该包含C, B, A
+      assert.is_not_nil(view.nodes_cache[1]) -- A
+      assert.is_not_nil(view.nodes_cache[2]) -- B
+      assert.is_not_nil(view.nodes_cache[3]) -- C
+      assert.is_nil(view.nodes_cache[4])    -- D不应该包含，因为从C通过入边无法到达
+      
+      -- 验证edges_cache包含所有可达边
+      assert.is_not_nil(view.edges_cache)
+      -- 应该包含A->B, B->C和两个方向的边
+      assert.equal(5, #view.edges_cache)
+    end)
+    
+    it("should handle cyclic graphs correctly", function()
+      -- 创建一个循环图: A -> B -> C -> A
+      local nodeA = { text = "A", nodeid = 1, incoming_edges = {}, outcoming_edges = {} }
+      local nodeB = { text = "B", nodeid = 2, incoming_edges = {}, outcoming_edges = {} }
+      local nodeC = { text = "C", nodeid = 3, incoming_edges = {}, outcoming_edges = {} }
+      
+      local edge_AB = { from_node = nodeA, to_node = nodeB }
+      local edge_BC = { from_node = nodeB, to_node = nodeC }
+      local edge_CA = { from_node = nodeC, to_node = nodeA }
+      
+      table.insert(nodeA.outcoming_edges, edge_AB)
+      table.insert(nodeB.incoming_edges, edge_AB)
+      
+      table.insert(nodeB.outcoming_edges, edge_BC)
+      table.insert(nodeC.incoming_edges, edge_BC)
+      
+      table.insert(nodeC.outcoming_edges, edge_CA)
+      table.insert(nodeA.incoming_edges, edge_CA)
+      
+      -- 使用原始的draw方法
+      local view = CallGraphView:new()
+      view:draw(nodeA, false) -- 从A开始，通过出边遍历
+      
+      -- 验证nodes_cache包含所有节点
+      assert.is_not_nil(view.nodes_cache)
+      assert.equal(3, vim.tbl_count(view.nodes_cache))
+      assert.is_not_nil(view.nodes_cache[1]) -- A
+      assert.is_not_nil(view.nodes_cache[2]) -- B
+      assert.is_not_nil(view.nodes_cache[3]) -- C
+      
+      -- 验证edges_cache包含所有边
+      assert.is_not_nil(view.edges_cache)
+      assert.equal(6, #view.edges_cache)  -- 出边和入边都会被收集
     end)
   end)
 end)

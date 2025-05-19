@@ -203,7 +203,31 @@ describe("Event callbacks", function()
     
     -- 模拟draw方法（绕过缓冲区逻辑）
     local original_draw = CallGraphView.draw
-    CallGraphView.draw = function(self, root_node, n, e)
+    CallGraphView.draw = function(self, root_node, traverse_by_incoming)
+      -- 从root_node构建节点和边缓存
+      local n = {}
+      local e = {}
+      
+      if root_node then
+        n[root_node.nodeid] = root_node
+        
+        -- 收集边
+        local traverse_edges = traverse_by_incoming and root_node.incoming_edges or root_node.outcoming_edges
+        for _, edge in ipairs(traverse_edges) do
+          table.insert(e, edge)
+        end
+        
+        -- 添加测试节点
+        for nodeid, node in pairs(nodes) do
+          n[nodeid] = node
+        end
+        
+        -- 添加测试边
+        for _, edge in ipairs(edges) do
+          table.insert(e, edge)
+        end
+      end
+      
       self.nodes_cache = n
       self.edges_cache = e
       
@@ -227,7 +251,7 @@ describe("Event callbacks", function()
   end)
   
   it("should register events when drawing graph", function()
-    view:draw(node1, nodes, edges)
+    view:draw(node1, false)
     
     -- 检查是否注册了所有事件
     assert.equal(2, #press_cb_calls) -- K和gd
@@ -243,8 +267,14 @@ describe("Event callbacks", function()
     end
     assert.is_not_nil(gd_call)
     assert.equal(1, gd_call.bufid)
-    assert.same(nodes, gd_call.ctx.nodes)
-    assert.same(edges, gd_call.ctx.edges)
+    
+    -- 不直接比较nodes和edges对象，因为收集逻辑可能生成不同的数组结构
+    -- 但应该包含相同的节点信息
+    local ctx_nodes = gd_call.ctx.nodes
+    assert.is_not_nil(ctx_nodes[1]) -- 应该包含节点1
+    assert.is_not_nil(ctx_nodes[2]) -- 应该包含节点2
+    assert.equal("RootNode", ctx_nodes[1].text)
+    assert.equal("ChildNode", ctx_nodes[2].text)
     
     -- 检查K键绑定
     local k_call = nil
@@ -256,7 +286,11 @@ describe("Event callbacks", function()
     end
     assert.is_not_nil(k_call)
     assert.equal(1, k_call.bufid)
-    assert.same(nodes, k_call.ctx.nodes)
+    
+    -- 同样检查nodes包含正确的节点
+    ctx_nodes = k_call.ctx.nodes
+    assert.is_not_nil(ctx_nodes[1])
+    assert.is_not_nil(ctx_nodes[2])
   end)
   
   -- 测试gd回调
@@ -266,7 +300,7 @@ describe("Event callbacks", function()
     node1.usr_data.attr.pos_params.textDocument.uri = original_uri:gsub("^file://", "")
     
     -- 在view上绘制图表
-    view:draw(node1, nodes, edges)
+    view:draw(node1, false)
     
     -- 找到gd回调函数
     local gd_call = nil
@@ -303,7 +337,7 @@ describe("Event callbacks", function()
     node2.usr_data.attr.pos_params.textDocument.uri = original_uri:gsub("^file://", "")
     
     -- 在view上绘制图表
-    view:draw(node1, nodes, edges)
+    view:draw(node1, false)
     
     local gd_call = nil
     for _, call in ipairs(press_cb_calls) do
@@ -339,7 +373,7 @@ describe("Event callbacks", function()
     node1.usr_data.attr.pos_params.textDocument.uri = original_uri:gsub("^file://", "")
     
     -- 在view上绘制图表
-    view:draw(node1, nodes, edges)
+    view:draw(node1, false)
     
     -- 追踪创建的悬浮窗口
     local created_floating_windows = {}
@@ -410,7 +444,7 @@ describe("Event callbacks", function()
     node2.usr_data.attr.pos_params.textDocument.uri = original_uri:gsub("^file://", "")
     
     -- 在view上绘制图表
-    view:draw(node1, nodes, edges)
+    view:draw(node1, false)
     
     -- 追踪创建的悬浮窗口
     local created_floating_windows = {}

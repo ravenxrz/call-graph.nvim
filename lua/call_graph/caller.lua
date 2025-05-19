@@ -302,16 +302,12 @@ function Caller.generate_call_graph(opts, call_type, on_generated_callback)
 
   local function on_graph_generated(root_node, nodes, edges)
     log.debug("graph generated, ", vim.inspect(nodes))
-    caller.view:draw(root_node, nodes, edges)
+    -- 确定是否通过入边遍历
+    local traverse_by_incoming = root_node and root_node.incoming_edges and #(root_node.incoming_edges) > 0
+    caller.view:draw(root_node, traverse_by_incoming)
     local buf_id = caller.view.buf.bufid
     vim.notify("[CallGraph] graph generated", vim.log.levels.INFO)
     
-    -- Store graph data for potential marking mode
-    -- This might be problematic if multiple graphs are generated without entering mark mode
-    -- current_graph_nodes_for_marking = nodes 
-    -- current_graph_edges_for_marking = edges
-    -- current_graph_view_for_marking = caller.view
-
     local root_node_name = root_node and root_node.text or "UnknownRoot"
     -- 传递完整的root_node，以便保存位置信息
     add_to_history(buf_id, root_node_name, call_type, root_node)
@@ -588,10 +584,11 @@ function Caller.end_mark_mode_and_generate_subgraph()
 
   -- 创建新视图并绘制子图
   local new_view = CallGraphView:new()
-  -- 使用 nodes_list 中的第一个节点作为根节点
-  local root_node = subgraph.nodes_list[1]
-  -- 绘制子图，传入所有必要的参数
-  new_view:draw(root_node, subgraph.nodes_map, subgraph.edges)
+  
+  -- 确定是否通过入边遍历
+  local traverse_by_incoming = subgraph.root_node and subgraph.root_node.incoming_edges and #(subgraph.root_node.incoming_edges) > 0
+  -- 使用子图的根节点作为绘图起点
+  new_view:draw(subgraph.root_node, traverse_by_incoming)
 
   -- 更新全局视图
   g_caller.view = new_view
@@ -619,6 +616,7 @@ function generate_subgraph(marked_node_ids, nodes, edges)
   local subgraph_nodes = {}
   local subgraph_nodes_map = {}
   local subgraph_edges = {}
+  local root_node = nil
 
   -- 添加标记的节点，并构建 nodeid->node 的 map
   for _, node_id in ipairs(marked_node_ids) do
@@ -638,6 +636,11 @@ function generate_subgraph(marked_node_ids, nodes, edges)
       end
       subgraph_nodes_map[node_id] = node_copy
       table.insert(subgraph_nodes, node_copy)
+      
+      -- 选择level最小的节点作为root_node，或使用第一个节点
+      if not root_node or (node_copy.level and (not root_node.level or node_copy.level < root_node.level)) then
+        root_node = node_copy
+      end
     end
   end
 
@@ -662,6 +665,7 @@ function generate_subgraph(marked_node_ids, nodes, edges)
   log.debug("[CG-DEBUG] Generated subgraph edges: ", vim.inspect(subgraph_edges))
 
   return {
+    root_node = root_node, -- 返回一个选定的根节点
     nodes_map = subgraph_nodes_map,
     nodes_list = subgraph_nodes,
     edges = subgraph_edges

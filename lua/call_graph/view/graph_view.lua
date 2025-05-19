@@ -494,37 +494,56 @@ end
 local GraphDrawer = require("call_graph.view.graph_drawer")
 
 --- draw the call graph
----@param root_node GraphNode
----@param nodes table<nodeid, GraphNode>
----@param edges table<Edge>
-function CallGraphView:draw(root_node, nodes, edges)
-  log.debug("view draw call. root_node: ", root_node and root_node.text or "nil", "num_nodes: ",
-    nodes and #nodes or (nodes and vim.tbl_count(nodes) or 0), "num_edges: ", 
-    edges and (type(edges) == "table" and #edges or vim.tbl_count(edges)) or 0)
-  log.debug("[CG-DEBUG] nodes type: ", type(nodes))
-  log.debug("[CG-DEBUG] nodes content: ", nodes and vim.inspect(nodes) or "nil")
-  log.debug("[CG-DEBUG] edges type: ", type(edges))
-  log.debug("[CG-DEBUG] edges content: ", edges and vim.inspect(edges) or "nil")
+---@param root_node GraphNode 图的根节点
+---@param traverse_by_incoming boolean 是否通过入边遍历图
+function CallGraphView:draw(root_node, traverse_by_incoming)
+  log.debug("view draw call. root_node: ", root_node and root_node.text or "nil")
 
   -- 清除当前视图
   self:clear_view()
 
-  -- 缓存原始节点和边数据
-  self.nodes_cache = nodes
-  self.edges_cache = edges
-
-  -- 确保 nodes_cache 是一个以 nodeid 为键的映射
-  if type(nodes) == "table" and nodes[1] ~= nil and nodes[1].nodeid ~= nil then
-    log.debug("[CG-DEBUG] Converting nodes list to map")
-    local nodes_map_for_cache = {}
-    for _, node_obj in ipairs(nodes) do
-      if node_obj and node_obj.nodeid then
-        nodes_map_for_cache[node_obj.nodeid] = node_obj
-      end
+  -- 从root_node开始遍历构建完整的节点和边集合
+  local nodes_map = {}
+  local edges_list = {}
+  
+  -- 递归收集所有可达的节点和边
+  local function collect_nodes_and_edges(node, visited)
+    if not node or visited[node.nodeid] then
+      return
     end
-    self.nodes_cache = nodes_map_for_cache
-    log.debug("[CG-DEBUG] Converted nodes map: ", vim.inspect(self.nodes_cache))
+    
+    -- 标记当前节点为已访问
+    visited[node.nodeid] = true
+    -- 添加到节点集合
+    nodes_map[node.nodeid] = node
+    
+    -- 获取要遍历的边
+    local edges = traverse_by_incoming and node.incoming_edges or node.outcoming_edges
+    
+    -- 处理每条边
+    for _, edge in ipairs(edges) do
+      -- 添加到边集合
+      table.insert(edges_list, edge)
+      
+      -- 递归处理下一个节点
+      local next_node = traverse_by_incoming and edge.from_node or edge.to_node
+      collect_nodes_and_edges(next_node, visited)
+    end
+    
+    -- 确保另一方向的边也被记录（虽然不用于遍历）
+    local other_edges = traverse_by_incoming and node.outcoming_edges or node.incoming_edges
+    for _, edge in ipairs(other_edges) do
+      -- 只添加边到集合，不递归遍历
+      table.insert(edges_list, edge)
+    end
   end
+  
+  -- 开始从根节点收集
+  collect_nodes_and_edges(root_node, {})
+  
+  -- 缓存构建的节点和边数据
+  self.nodes_cache = nodes_map
+  self.edges_cache = edges_list
 
   -- 如果缓冲区无效或未创建，则创建新缓冲区
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
@@ -541,29 +560,20 @@ function CallGraphView:draw(root_node, nodes, edges)
   vim.api.nvim_buf_set_name(self.buf.bufid, target_buf_name)
 
   -- 设置缓冲区事件处理
-  self:setup_buf(nodes, edges)
+  self:setup_buf(nodes_map, edges_list)
 
   -- 创建图形绘制器
   self.buf.graph = GraphDrawer:new(self.buf.bufid, {
     cb = draw_edge_cb,
-    cb_ctx = { edges = edges, self = self },
+    cb_ctx = { edges = edges_list, self = self },
   })
   self.buf.graph:set_modifiable(true)
-  -- 修复：确保 graph_drawer.nodes 不为 nil
+  
+  -- 设置 GraphDrawer 的节点集
   self.buf.graph.nodes = self.nodes_cache
 
-  -- 根据入边和出边情况调用 draw 函数
-  if root_node and root_node.incoming_edges and #(root_node.incoming_edges) > 0 then
-    self.buf.graph:draw(root_node, true)  -- 只有入边，使用传入边遍历
-  else
-    self.buf.graph:draw(root_node, false) -- 其余场景
-  end
-
-  -- 确保边数据被正确保存
-  if edges and type(edges) == "table" then
-    self.edges_cache = edges
-    log.debug("[CG-DEBUG] Saved edges to cache: ", vim.inspect(self.edges_cache))
-  end
+  -- 调用 GraphDrawer 的 draw 函数
+  self.buf.graph:draw(root_node, traverse_by_incoming)
 
   -- 切换到当前缓冲区
   vim.api.nvim_set_current_buf(self.buf.bufid)
