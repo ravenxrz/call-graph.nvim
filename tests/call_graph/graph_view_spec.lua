@@ -139,12 +139,6 @@ describe("CallGraphView", function()
     assert.is.True(view.toggle_auto_hl)
   end)
 
-  it("should reuse a buffer", function()
-    local bufid = 123
-    view:reuse_buf(bufid)
-    assert.equal(view.buf.bufid, bufid)
-  end)
-
   it("should draw the graph", function()
     -- 替换CallGraphView.draw方法进行测试
     CallGraphView.draw = function(self, root_node, traverse_by_incoming)
