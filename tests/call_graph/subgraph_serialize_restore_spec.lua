@@ -4,40 +4,40 @@ local Edge = require("call_graph.class.edge")
 local SubEdge = require("call_graph.class.subedge")
 local GraphNode = require("call_graph.class.graph_node")
 
--- 创建一个带有序列化与反序列化处理的测试套件
+-- Create a test suite for serialization and deserialization
 describe("Subgraph serialization and restoration", function()
   local mock_fs = {}
   local history_file_path = "/Users/leo/Projects/call-graph.nvim/.call_graph_history.json"
   local original_history_path_func
   local test_history_data = nil
 
-  -- 初始化测试环境
+  -- Initialize test environment
   before_each(function()
-    -- 备份原始函数
+    -- Backup original function
     original_history_path_func = Caller._get_history_file_path_func()
 
-    -- Mock文件系统操作
+    -- Mock file system operations
     mock_fs.files = {}
-    -- 确保测试历史文件路径存在，注意这个路径要和后面的history_file_path()函数返回值一致
+    -- Ensure test history file path exists, note this path should match the return value of history_file_path()
     mock_fs.files[history_file_path] = ""
 
-    -- 重写io.open用于测试
+    -- Override io.open for testing
     _G.io.open = function(path, mode)
-      print("io.open被调用，路径: " .. path .. ", 模式: " .. mode)
+      print("io.open called, path: " .. path .. ", mode: " .. mode)
       if mode == "w" then
         mock_fs.files[path] = ""
         return {
           write = function(_, content)
-            print("写入文件 " .. path .. "，内容长度: " .. #content)
+            print("Writing to file " .. path .. ", content length: " .. #content)
             mock_fs.files[path] = content
           end,
           close = function()
-            print("关闭文件: " .. path)
+            print("Closing file: " .. path)
           end,
         }
       elseif mode == "r" then
         if mock_fs.files[path] then
-          print("读取文件: " .. path .. ", 文件存在")
+          print("Reading file: " .. path .. ", file exists")
           return {
             read = function(_)
               return mock_fs.files[path]
@@ -45,21 +45,21 @@ describe("Subgraph serialization and restoration", function()
             close = function() end,
           }
         else
-          print("读取文件: " .. path .. ", 文件不存在")
+          print("Reading file: " .. path .. ", file does not exist")
           return nil
         end
       end
     end
 
-    -- 修改历史文件路径函数，返回固定的测试文件路径
+    -- Modify history file path function to return fixed test file path
     Caller._get_history_file_path_func = function()
       return function()
-        print("获取历史文件路径: " .. history_file_path)
+        print("Getting history file path: " .. history_file_path)
         return history_file_path
       end
     end
 
-    -- 确保测试开始前清空历史
+    -- Ensure history is cleared before each test
     Caller._set_max_history_size(20)
     local history = Caller._get_graph_history()
     while #history > 0 do
@@ -67,33 +67,33 @@ describe("Subgraph serialization and restoration", function()
     end
   end)
 
-  -- 清理测试环境
+  -- Clean up test environment
   after_each(function()
-    -- 恢复原始函数
+    -- Restore original function
     Caller._get_history_file_path_func = original_history_path_func
-    -- 重置文件模拟
+    -- Reset file mock
     mock_fs.files = {}
-    -- 清空历史
+    -- Clear history
     local history = Caller._get_graph_history()
     while #history > 0 do
       table.remove(history)
     end
   end)
 
-  -- 在每个测试用例前重置测试数据
+  -- Reset test data before each test case
   before_each(function()
-    -- 清空歷史
+    -- Clear history
     local history = Caller._get_graph_history()
     while #history > 0 do
       table.remove(history)
     end
-    -- 清空模拟文件系统
+    -- Clear mock file system
     mock_fs.files = {}
   end)
 
-  -- 创建一个测试图结构（带有节点、边和子边）
+  -- Create a test graph structure (with nodes, edges, and subedges)
   local function create_test_graph()
-    -- 创建节点
+    -- Create nodes
     local node1 = GraphNode:new("function1", {
       attr = {
         pos_params = {
@@ -121,11 +121,11 @@ describe("Subgraph serialization and restoration", function()
       },
     })
 
-    -- 创建子边
+    -- Create subedges
     local sub_edge1 = SubEdge:new(0, 10, 1, 20)
     local sub_edge2 = SubEdge:new(1, 15, 2, 25)
 
-    -- 创建边并关联子边
+    -- Create edges and associate subedges
     local edge1 = Edge:new(node1, node2, {
       textDocument = { uri = "file:///test/edge1.lua" },
       position = { line = 15, character = 10 },
@@ -136,13 +136,13 @@ describe("Subgraph serialization and restoration", function()
       position = { line = 25, character = 20 },
     }, { sub_edge2 })
 
-    -- 设置节点之间的连接关系
+    -- Set node connection relationships
     table.insert(node1.outcoming_edges, edge1)
     table.insert(node2.incoming_edges, edge1)
     table.insert(node2.outcoming_edges, edge2)
     table.insert(node3.incoming_edges, edge2)
 
-    -- 返回完整图结构
+    -- Return complete graph structure
     return {
       nodes_map = {
         [node1.nodeid] = node1,
@@ -154,37 +154,37 @@ describe("Subgraph serialization and restoration", function()
     }
   end
 
-  -- 验证两个图结构是否相等
+  -- Verify two graph structures are equal
   local function assert_graphs_equal(graph1, graph2)
-    -- 检查节点数量是否相同
+    -- Check if node count is the same
     assert.are.equal(vim.tbl_count(graph1.nodes_map), vim.tbl_count(graph2.nodes_map))
 
-    -- 检查边数量是否相同
+    -- Check if edge count is the same
     assert.are.equal(#graph1.edges, #graph2.edges)
 
-    -- 检查根节点是否相同（通过文本比较）
+    -- Check if root node is the same (by text comparison)
     assert.are.equal(graph1.root_node.text, graph2.root_node.text)
 
-    -- 检查每个节点的文本和位置信息
+    -- Check each node's text and position information
     for id, node1 in pairs(graph1.nodes_map) do
       local node2 = graph2.nodes_map[id]
       assert.is_not_nil(node2, "Node with ID " .. id .. " not found in second graph")
       assert.are.equal(node1.text, node2.text)
 
-      -- 检查入边和出边数量
+      -- Check incoming and outgoing edge counts
       assert.are.equal(#node1.incoming_edges, #node2.incoming_edges)
       assert.are.equal(#node1.outcoming_edges, #node2.outcoming_edges)
     end
 
-    -- 检查每条边的属性
+    -- Check each edge's attributes
     for i, edge1 in ipairs(graph1.edges) do
       local edge2 = graph2.edges[i]
 
-      -- 检查边的from_node和to_node
+      -- Check edge's from_node and to_node
       assert.are.equal(edge1.from_node.text, edge2.from_node.text)
       assert.are.equal(edge1.to_node.text, edge2.to_node.text)
 
-      -- 最重要：检查sub_edges的数量和内容
+      -- Most important: Check sub_edges count and content
       assert.is_not_nil(edge1.sub_edges, "Edge1 sub_edges is nil")
       assert.is_not_nil(edge2.sub_edges, "Edge2 sub_edges is nil")
       assert.are.equal(#edge1.sub_edges, #edge2.sub_edges)
@@ -192,11 +192,11 @@ describe("Subgraph serialization and restoration", function()
       for j, sub_edge1 in ipairs(edge1.sub_edges) do
         local sub_edge2 = edge2.sub_edges[j]
 
-        -- 确保两个子边都有to_string方法
+        -- Ensure both sub_edges have to_string method
         assert.is_not_nil(sub_edge1.to_string, "SubEdge1 missing to_string method")
         assert.is_not_nil(sub_edge2.to_string, "SubEdge2 missing to_string method")
 
-        -- 验证子边的坐标属性
+        -- Verify sub_edge coordinate attributes
         assert.are.equal(sub_edge1.start_row, sub_edge2.start_row)
         assert.are.equal(sub_edge1.start_col, sub_edge2.start_col)
         assert.are.equal(sub_edge1.end_row, sub_edge2.end_row)
@@ -205,12 +205,12 @@ describe("Subgraph serialization and restoration", function()
     end
   end
 
-  -- 测试子图序列化和反序列化的完整流程
+  -- Test subgraph serialization and deserialization complete process
   it("should correctly serialize and restore subgraph with SubEdge objects", function()
-    -- 1. 创建测试图
+    -- 1. Create test graph
     local test_graph = create_test_graph()
 
-    -- 2. 模拟添加到历史记录
+    -- 2. Simulate adding to history
     local history_entry = {
       buf_id = 101,
       root_node_name = test_graph.root_node.text,
@@ -222,46 +222,46 @@ describe("Subgraph serialization and restoration", function()
     local history = Caller._get_graph_history()
     table.insert(history, 1, history_entry)
 
-    -- 3. 保存历史记录到"文件"
-    print("开始保存历史记录...")
+    -- 3. Save history to "file"
+    print("Starting to save history...")
     Caller.save_history_to_file()
 
-    -- 确保数据被正确写入到模拟文件系统
-    print("检查文件是否存在: " .. tostring(mock_fs.files[history_file_path] ~= nil))
-    print("文件内容长度: " .. (mock_fs.files[history_file_path] and #mock_fs.files[history_file_path] or 0))
+    -- Ensure data is correctly written to mock file system
+    print("Checking if file exists: " .. tostring(mock_fs.files[history_file_path] ~= nil))
+    print("File content length: " .. (mock_fs.files[history_file_path] and #mock_fs.files[history_file_path] or 0))
     assert.is_not_nil(mock_fs.files[history_file_path])
     assert.is_not.equal(mock_fs.files[history_file_path], "")
 
-    -- 4. 清空内存中的历史记录
+    -- 4. Clear history in memory
     while #history > 0 do
       table.remove(history)
     end
     assert.are.equal(0, #history)
 
-    -- 5. 从"文件"重新加载历史记录
-    print("开始加载历史记录...")
-    assert.is_not_nil(mock_fs.files[history_file_path], "历史文件应该已创建")
-    assert.is_not.equal(mock_fs.files[history_file_path], "", "历史文件不应为空")
+    -- 5. Load history from "file"
+    print("Starting to load history...")
+    assert.is_not_nil(mock_fs.files[history_file_path], "History file should be created")
+    assert.is_not.equal(mock_fs.files[history_file_path], "", "History file should not be empty")
     Caller.load_history_from_file()
 
-    -- 重新获取历史记录引用
+    -- Get history reference again
     history = Caller._get_graph_history()
 
-    -- 6. 验证是否正确加载了历史记录
-    print("加载后的历史记录数量: " .. #history)
+    -- 6. Verify if history is correctly loaded
+    print("Number of history entries after loading: " .. #history)
     assert.are.equal(1, #history)
     assert.are.equal(Caller.CallType.SUBGRAPH_CALL, history[1].call_type)
     assert.are.equal(test_graph.root_node.text, history[1].root_node_name)
 
-    -- 7. 获取恢复的子图
+    -- 7. Get restored subgraph
     local restored_subgraph = history[1].subgraph
-    print("恢复的子图是否为nil: " .. tostring(restored_subgraph == nil))
-    assert.is_not_nil(restored_subgraph, "恢复的子图不应为nil")
+    print("Is restored subgraph nil: " .. tostring(restored_subgraph == nil))
+    assert.is_not_nil(restored_subgraph, "Restored subgraph should not be nil")
 
-    -- 8. 验证恢复的子图结构是否正确
+    -- 8. Verify restored subgraph structure is correct
     assert_graphs_equal(test_graph, restored_subgraph)
 
-    -- 9. 特别验证子边的to_string方法可以正常调用
+    -- 9. Special verification that SubEdge:to_string method can be called normally
     for _, edge in ipairs(restored_subgraph.edges) do
       assert.is_not_nil(edge.sub_edges)
       for _, sub_edge in ipairs(edge.sub_edges) do
@@ -272,14 +272,14 @@ describe("Subgraph serialization and restoration", function()
     end
   end)
 
-  -- 测试完整的使用流程：生成子图 -> 保存 -> 重启 -> 加载
+  -- Test complete workflow: generate subgraph -> save -> restart -> load
   it("should correctly handle the complete workflow of subgraph generation, save, and restore", function()
-    -- 模拟整个过程
+    -- Simulate the entire process
 
-    -- 1. 创建原始图
+    -- 1. Create original graph
     local original_graph = create_test_graph()
 
-    -- 2. 选择节点以生成子图（这里我们选择节点1和节点2）
+    -- 2. Select nodes to generate subgraph (here we select node1 and node2)
     local marked_node_ids = {}
     for id, node in pairs(original_graph.nodes_map) do
       if node.text == "function1" or node.text == "function2" then
@@ -287,13 +287,13 @@ describe("Subgraph serialization and restoration", function()
       end
     end
 
-    -- 3. 生成子图
+    -- 3. Generate subgraph
     local generated_subgraph = Caller.generate_subgraph(marked_node_ids, original_graph.nodes_map, original_graph.edges)
 
     assert.is_not_nil(generated_subgraph)
     assert.is_not_nil(generated_subgraph.root_node)
 
-    -- 4. 添加子图到历史记录
+    -- 4. Add subgraph to history
     local history_entry = {
       buf_id = 102,
       root_node_name = generated_subgraph.root_node.text,
@@ -305,53 +305,53 @@ describe("Subgraph serialization and restoration", function()
     local history = Caller._get_graph_history()
     table.insert(history, 1, history_entry)
 
-    -- 5. 保存历史记录到"文件"（模拟重启前保存状态）
-    print("测试2: 开始保存历史记录...")
+    -- 5. Save history to "file" (simulate saving state before restart)
+    print("Test 2: Starting to save history...")
     Caller.save_history_to_file()
 
-    -- 检查文件是否正确写入
-    print("测试2: 检查文件是否存在: " .. tostring(mock_fs.files[history_file_path] ~= nil))
+    -- Check if file is written correctly
+    print("Test 2: Checking if file exists: " .. tostring(mock_fs.files[history_file_path] ~= nil))
     print(
-      "测试2: 文件内容长度: " .. (mock_fs.files[history_file_path] and #mock_fs.files[history_file_path] or 0)
+      "Test 2: File content length: " .. (mock_fs.files[history_file_path] and #mock_fs.files[history_file_path] or 0)
     )
 
-    -- 6. 清空内存中的历史记录（模拟重启）
+    -- 6. Clear history in memory (simulate restart)
     while #history > 0 do
       table.remove(history)
     end
 
-    -- 7. 从"文件"加载历史记录（模拟重启后）
-    print("测试2: 开始加载历史记录...")
-    assert.is_not_nil(mock_fs.files[history_file_path], "历史文件应该已创建")
-    assert.is_not.equal(mock_fs.files[history_file_path], "", "历史文件不应为空")
+    -- 7. Load history from "file" (simulate after restart)
+    print("Test 2: Starting to load history...")
+    assert.is_not_nil(mock_fs.files[history_file_path], "History file should be created")
+    assert.is_not.equal(mock_fs.files[history_file_path], "", "History file should not be empty")
     Caller.load_history_from_file()
 
-    -- 重新获取历史记录引用
+    -- Get history reference again
     history = Caller._get_graph_history()
 
-    -- 8. 确认历史记录被正确加载
-    print("测试2: 加载后的历史记录数量: " .. #history)
+    -- 8. Verify history is loaded correctly
+    print("Test 2: Number of history entries after loading: " .. #history)
     assert.are.equal(1, #history)
 
-    -- 9. 获取恢复的子图
+    -- 9. Get restored subgraph
     local restored_subgraph = history[1].subgraph
-    print("测试2: 恢复的子图是否为nil: " .. tostring(restored_subgraph == nil))
-    assert.is_not_nil(restored_subgraph, "恢复的子图不应为nil")
+    print("Test 2: Is restored subgraph nil: " .. tostring(restored_subgraph == nil))
+    assert.is_not_nil(restored_subgraph, "Restored subgraph should not be nil")
 
-    -- 10. 比较原始子图和恢复的子图是否一致
+    -- 10. Compare if original subgraph and restored subgraph are identical
     assert_graphs_equal(generated_subgraph, restored_subgraph)
 
-    -- 11. 再次测试Edge对象和SubEdge对象的方法可用性
+    -- 11. Test Edge and SubEdge object methods again
     for _, edge in ipairs(restored_subgraph.edges) do
-      -- 测试Edge:to_string方法
+      -- Test Edge:to_string method
       local edge_to_string = edge:to_string()
       assert.is_not_nil(edge_to_string)
 
-      -- 测试Edge:is_same_edge方法
+      -- Test Edge:is_same_edge method
       local is_same = edge:is_same_edge(edge)
       assert.is_true(is_same)
 
-      -- 测试SubEdge:to_string方法
+      -- Test SubEdge:to_string method
       for _, sub_edge in ipairs(edge.sub_edges) do
         local sub_edge_to_string = sub_edge:to_string()
         assert.is_not_nil(sub_edge_to_string)
