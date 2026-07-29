@@ -40,7 +40,7 @@ local function get_ref_func_symbol_by_lsp(uri, range, callback)
     local client = clients[1]
 
     -- 发送 document_symbol 异步请求
-    client.request("textDocument/documentSymbol", { textDocument = { uri = uri } }, function(err, symbols, _, _)
+    client:request("textDocument/documentSymbol", { textDocument = { uri = uri } }, function(err, symbols, _, _)
       if err or not symbols then
         log.warn("Failed to get document symbols", "uri", uri, "error", err)
         callback(nil)
@@ -108,7 +108,7 @@ local function get_ref_func_symbol_by_lsp(uri, range, callback)
     end, 0)
   else
     vim.notify(string.format("no buf find for:%s", uri), vim.log.levels.ERROR)
-    callback(ni)
+    callback(nil)
   end
 end
 

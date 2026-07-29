@@ -42,7 +42,7 @@ function IncomingCallGraphData:call_handler(err, result, _, my_ctx)
     return
   end
 
-  client.request("callHierarchy/incomingCalls", { item = item }, function(err, result)
+  client:request("callHierarchy/incomingCalls", { item = item }, function(err, result)
     if err then
       log.info("Error getting incoming calls: " .. err.message)
       self:gen_call_graph_done()

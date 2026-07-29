@@ -404,16 +404,20 @@ function GraphDrawer:draw(root_node, traverse_by_incoming)
       )
       local from_node, to_node = edge.from_node, edge.to_node
       if from_node.nodeid == to_node.nodeid then
-        log.warn("node", node.text, "node id", node.nodeid, "has same id with child", child.text, "node id")
-        return
-      end
-      if from_node.col <= to_node.col then -- from node is on the lhs
-        draw_edge(self, from_node, to_node, cur_level_max_col[from_node.level])
-      else -- from node is on the rhs
-        draw_edge(self, from_node, to_node, cur_level_max_col[to_node.level])
-      end
-      if not visit[child.nodeid] then
-        traverse(child)
+        -- Degenerate self-referencing edge (e.g. a recursive function, or two
+        -- call sites deduped onto the same node). Skip only this edge; do NOT
+        -- abort the whole node, otherwise the remaining sibling edges (such as
+        -- the last child) would never be drawn.
+        log.warn("node", node.text, "node id", node.nodeid, "has a self-referencing edge, skip drawing it")
+      else
+        if from_node.col <= to_node.col then -- from node is on the lhs
+          draw_edge(self, from_node, to_node, cur_level_max_col[from_node.level])
+        else -- from node is on the rhs
+          draw_edge(self, from_node, to_node, cur_level_max_col[to_node.level])
+        end
+        if not visit[child.nodeid] then
+          traverse(child)
+        end
       end
     end
     visit[node.nodeid] = false

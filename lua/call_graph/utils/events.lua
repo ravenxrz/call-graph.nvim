@@ -83,8 +83,13 @@ end
 function M.clear_buffer(bufnr)
   if M.bufs[bufnr] then
     log.debug("clear buf id", bufnr, "cb")
+    -- 移除该 buffer 上注册过的所有按键映射（不再硬编码 "gd"，也覆盖 "K" 等）
+    if M.bufs[bufnr].press_cb then
+      for keymap, _ in pairs(M.bufs[bufnr].press_cb) do
+        pcall(vim.keymap.del, "n", keymap, { buffer = bufnr })
+      end
+    end
     M.bufs[bufnr] = nil -- 移除 bufnr 对应的回调函数
-    vim.keymap.del("n", "gd", { buffer = bufnr }) -- 移除快捷键
   end
 end
 

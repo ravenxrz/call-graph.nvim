@@ -3,7 +3,7 @@ local log = {}
 -- 默认配置
 log.config = {
   level = "info", -- 日志级别：trace, debug, info, warn, error, fatal
-  filepath = vim.fn.stdpath("state") .. "/call_grap_" .. os.date("%Y-%m-%d") .. ".log", -- 日志文件名
+  filepath = vim.fn.stdpath("state") .. "/call_graph_" .. os.date("%Y-%m-%d") .. ".log", -- 日志文件名
   append = true, -- 是否追加到文件
   caller = true, -- 是否显示调用者信息
 }
