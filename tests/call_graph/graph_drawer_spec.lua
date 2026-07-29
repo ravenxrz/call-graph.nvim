@@ -1530,4 +1530,68 @@ describe("GraphDrawer", function()
     assert.equals(0, edge.sub_edges[1].start_row)
     assert.equals(1, edge.sub_edges[1].end_row)
   end)
+
+  it("should still draw remaining sibling edges when a node has a self-referencing edge", function()
+    -- Regression: a recursive node (self-edge) must not abort drawing the rest
+    -- of its sibling edges. Previously the second-round DFS did `return` on a
+    -- self-edge, so the last child ("Child2Node") lost its connecting line.
+    local root_node = {
+      row = 0,
+      col = 0,
+      text = "RootNode",
+      level = 1,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 1,
+      usr_data = {},
+    }
+    local child1_node = {
+      row = 0,
+      col = 0,
+      text = "Child1Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 2,
+      usr_data = {},
+    }
+    local child2_node = {
+      row = 0,
+      col = 0,
+      text = "Child2Node",
+      level = 2,
+      incoming_edges = {},
+      outcoming_edges = {},
+      nodeid = 3,
+      usr_data = {},
+    }
+
+    -- Self-referencing edge on the root, placed BEFORE the child edges so the
+    -- old code would bail out and skip both children.
+    local self_edge = Edge:new(root_node, root_node, nil, {})
+    table.insert(root_node.outcoming_edges, self_edge)
+
+    local edge1 = Edge:new(root_node, child1_node, nil, {})
+    table.insert(root_node.outcoming_edges, edge1)
+    table.insert(child1_node.incoming_edges, edge1)
+
+    local edge2 = Edge:new(root_node, child2_node, nil, {})
+    table.insert(root_node.outcoming_edges, edge2)
+    table.insert(child2_node.incoming_edges, edge2)
+
+    graph_drawer.nodes =
+      { [1] = root_node, [2] = child1_node, [3] = child2_node }
+    graph_drawer:draw(root_node, false)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local model_lines = {
+      "RootNode---->Child1Node",
+      "          |",
+      "          -->Child2Node",
+    }
+    local ret = table_equal(lines, model_lines)
+    if not ret then
+      assert.equal(model_lines, lines) -- get a pretty print
+    end
+    assert.is.True(ret)
+  end)
 end)

@@ -88,7 +88,7 @@ function OutcomingCall:find_containing_function(cursor_row, cursor_col, lang)
   local params = { textDocument = vim_lsp.util.make_text_document_params(bufnr) }
   local result = nil
   for _, client in ipairs(clients) do
-    result = client.request_sync("textDocument/documentSymbol", params, 2000, bufnr)
+    result = client:request_sync("textDocument/documentSymbol", params, 2000, bufnr)
     if result and result.result then
       break
     end

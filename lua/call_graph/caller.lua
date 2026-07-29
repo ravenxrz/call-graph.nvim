@@ -30,6 +30,10 @@ local g_caller = nil
 local last_call_type = Caller.CallType._NO_CALl
 local mermaid_path = ".call_graph.mermaid"
 
+-- Forward declarations for local functions referenced before their definition.
+local generate_subgraph
+local push_subgraph_to_history
+
 -- Graph history management
 local graph_history = {}
 local max_history_size = 20
@@ -56,8 +60,19 @@ local function get_history_file_path()
   return project_root .. "/.call_graph_history.json"
 end
 
--- History file path is now a function instead of a static variable
-local history_file_path = get_history_file_path
+-- Expose the history file path provider for testing. Tests can override this
+-- to redirect reads/writes to a mock file system. Defined early so it is
+-- available when init() loads history at module load time.
+Caller._get_history_file_path_func = function()
+  return get_history_file_path
+end
+
+-- Resolve the current history file path, honoring any test override of
+-- Caller._get_history_file_path_func. All internal read/write/clear paths
+-- must go through this so overrides take effect.
+local function resolve_history_file_path()
+  return Caller._get_history_file_path_func()()
+end
 
 -- Store mapping between graph buffer ID and caller instance for easier updating of g_caller
 -- This mapping is crucial for solving the following issues:
@@ -76,7 +91,7 @@ local current_graph_view_for_marking = nil -- Stores the view of the current gra
 --- Save history to file
 local function save_history_to_file()
   -- Get project-specific history file path
-  local file_path = history_file_path()
+  local file_path = resolve_history_file_path()
 
   -- Create data structure to save (only save necessary information, not including temporary buf_id)
   local data_to_save = {}
@@ -195,7 +210,7 @@ end
 --- Load history from file
 local function load_history_from_file()
   -- Get project-specific history file path
-  local file_path = history_file_path()
+  local file_path = resolve_history_file_path()
 
   -- Check if file exists
   local file = io.open(file_path, "r")
@@ -492,6 +507,70 @@ local function add_to_history(buf_id, root_node_name, call_type, root_node)
   save_history_to_file()
 end
 
+--- Deep copy a freshly drawn subgraph, validate it, and push it into history.
+--- Shared by regenerate_graph_from_history and end_mark_mode_and_generate_subgraph
+--- to avoid duplicated serialization/trim/save/export logic.
+---@param subgraph table The subgraph structure (must contain root_node, nodes_map, edges)
+---@param buf_id number The buffer id of the drawn subgraph
+---@return boolean success true if the subgraph was added to history
+function push_subgraph_to_history(subgraph, buf_id)
+  if not (subgraph and subgraph.root_node and buf_id and vim.api.nvim_buf_is_valid(buf_id)) then
+    return false
+  end
+
+  local root_node_name = subgraph.root_node.text or "Subgraph"
+
+  -- Deep copy subgraph structure, ensure safe handling
+  local subgraph_copy = vim.deepcopy(subgraph)
+
+  -- Verify subgraph structure completeness
+  if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
+    log.warn("Subgraph structure incomplete, cannot add to history")
+    vim.notify("[CallGraph] Subgraph structure incomplete, cannot save to history", vim.log.levels.WARN)
+    return false
+  end
+
+  -- Ensure all node IDs in nodes_map are valid
+  local fixed_nodes_map = {}
+  for id, node in pairs(subgraph_copy.nodes_map) do
+    if type(node) == "table" then
+      fixed_nodes_map[id] = node
+    else
+      log.warn("Skipping non-table type node: " .. tostring(id))
+    end
+  end
+  subgraph_copy.nodes_map = fixed_nodes_map
+
+  -- Create history record entry for entire subgraph
+  local history_entry = {
+    buf_id = buf_id,
+    root_node_name = root_node_name,
+    call_type = Caller.CallType.SUBGRAPH_CALL,
+    timestamp = os.time(),
+    subgraph = subgraph_copy,
+  }
+
+  -- Insert into history at front
+  table.insert(graph_history, 1, history_entry)
+
+  -- If history exceeds max size, remove oldest
+  if #graph_history > max_history_size then
+    table.remove(graph_history, #graph_history)
+  end
+
+  -- Save history to file
+  save_history_to_file()
+
+  -- Export mermaid chart, ensure user can view latest chart
+  local opts = require("call_graph").opts
+  if opts.export_mermaid_graph then
+    MermaidGraph.export(subgraph.root_node, mermaid_path)
+  end
+
+  vim.notify("[CallGraph] Subgraph generated and added to history", vim.log.levels.INFO)
+  return true
+end
+
 --- Open the latest graph
 function Caller.open_latest_graph()
   if #graph_history == 0 then
@@ -579,59 +658,8 @@ function Caller.regenerate_graph_from_history(history_entry)
     -- Use subgraph's root node as drawing starting point
     new_view:draw(subgraph.root_node, traverse_by_incoming)
 
-    -- Add subgraph to history
-    if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
-      local root_node_name = subgraph.root_node.text or "Subgraph"
-
-      -- Deep copy subgraph structure, ensure safe handling
-      local subgraph_copy = vim.deepcopy(subgraph)
-
-      -- Verify subgraph structure completeness
-      if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
-        log.warn("Subgraph structure incomplete, cannot add to history")
-        vim.notify("[CallGraph] Subgraph structure incomplete, cannot save to history", vim.log.levels.WARN)
-        return
-      end
-
-      -- Ensure all node IDs in nodes_map are valid
-      local fixed_nodes_map = {}
-      for id, node in pairs(subgraph_copy.nodes_map) do
-        if type(node) == "table" then
-          fixed_nodes_map[id] = node
-        else
-          log.warn("Skipping non-table type node: " .. tostring(id))
-        end
-      end
-      subgraph_copy.nodes_map = fixed_nodes_map
-
-      -- Create history record entry for entire subgraph
-      local history_entry = {
-        buf_id = new_view.buf.bufid,
-        root_node_name = root_node_name,
-        call_type = Caller.CallType.SUBGRAPH_CALL,
-        timestamp = os.time(),
-        subgraph = subgraph_copy,
-      }
-
-      -- Insert into history at front
-      table.insert(graph_history, 1, history_entry)
-
-      -- If history exceeds max size, remove oldest
-      if #graph_history > max_history_size then
-        table.remove(graph_history, #graph_history)
-      end
-
-      -- Save history to file
-      save_history_to_file()
-
-      -- Export mermaid chart, ensure user can view latest chart
-      local opts = require("call_graph").opts
-      if opts.export_mermaid_graph then
-        MermaidGraph.export(subgraph.root_node, mermaid_path)
-      end
-
-      vim.notify("[CallGraph] Subgraph generated and added to history", vim.log.levels.INFO)
-    end
+    -- Add subgraph to history (deep copy + validate + trim + save + export)
+    push_subgraph_to_history(subgraph, new_view.buf and new_view.buf.bufid)
 
     -- Create new caller instance
     local new_caller = create_caller(nil, new_view)
@@ -1043,59 +1071,8 @@ function Caller.end_mark_mode_and_generate_subgraph()
   -- Use subgraph's root node as drawing starting point
   new_view:draw(subgraph.root_node, traverse_by_incoming)
 
-  -- Add subgraph to history
-  if subgraph.root_node and new_view.buf and new_view.buf.bufid and vim.api.nvim_buf_is_valid(new_view.buf.bufid) then
-    local root_node_name = subgraph.root_node.text or "Subgraph"
-
-    -- Deep copy subgraph structure, ensure safe handling
-    local subgraph_copy = vim.deepcopy(subgraph)
-
-    -- Verify subgraph structure completeness
-    if not subgraph_copy.nodes_map or not subgraph_copy.edges or not subgraph_copy.root_node then
-      log.warn("Subgraph structure incomplete, cannot add to history")
-      vim.notify("[CallGraph] Subgraph structure incomplete, cannot save to history", vim.log.levels.WARN)
-      return
-    end
-
-    -- Ensure all node IDs in nodes_map are valid
-    local fixed_nodes_map = {}
-    for id, node in pairs(subgraph_copy.nodes_map) do
-      if type(node) == "table" then
-        fixed_nodes_map[id] = node
-      else
-        log.warn("Skipping non-table type node: " .. tostring(id))
-      end
-    end
-    subgraph_copy.nodes_map = fixed_nodes_map
-
-    -- Create history record entry for entire subgraph
-    local history_entry = {
-      buf_id = new_view.buf.bufid,
-      root_node_name = root_node_name,
-      call_type = Caller.CallType.SUBGRAPH_CALL,
-      timestamp = os.time(),
-      subgraph = subgraph_copy,
-    }
-
-    -- Insert into history at front
-    table.insert(graph_history, 1, history_entry)
-
-    -- If history exceeds max size, remove oldest
-    if #graph_history > max_history_size then
-      table.remove(graph_history, #graph_history)
-    end
-
-    -- Save history to file
-    save_history_to_file()
-
-    -- Export mermaid chart, ensure user can view latest chart
-    local opts = require("call_graph").opts
-    if opts.export_mermaid_graph then
-      MermaidGraph.export(subgraph.root_node, mermaid_path)
-    end
-
-    vim.notify("[CallGraph] Subgraph generated and added to history", vim.log.levels.INFO)
-  end
+  -- Add subgraph to history (deep copy + validate + trim + save + export)
+  push_subgraph_to_history(subgraph, new_view.buf and new_view.buf.bufid)
 
   -- Create new caller instance
   local new_caller = create_caller(nil, new_view)
@@ -1252,11 +1229,6 @@ Caller._set_max_history_size = function(size)
   end
 end
 
--- Expose history file path function for testing
-Caller._get_history_file_path_func = function()
-  return get_history_file_path
-end
-
 -- Expose load_history_from_file for testing
 Caller.load_history_from_file = load_history_from_file
 
@@ -1272,7 +1244,7 @@ function Caller.clear_history()
   graph_history = {}
 
   -- Get history file path
-  local file_path = history_file_path()
+  local file_path = resolve_history_file_path()
 
   -- Try to clear history file (write empty content)
   local file = io.open(file_path, "w")

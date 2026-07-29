@@ -88,7 +88,7 @@ function BaseCallGraphData:find_buf_client(method)
   for _, c in ipairs(clients) do
     -- 检查是否有supports_method函数
     if c.supports_method then
-      local supports = c.supports_method(method)
+      local supports = c:supports_method(method)
       log.info(string.format("Client %s supports method %s: %s", c.name or c.id, method, tostring(supports)))
       if supports then
         log.info("Using client " .. (c.name or tostring(c.id)) .. " for method " .. method)
@@ -133,7 +133,7 @@ function BaseCallGraphData:generate_call_graph_from_node(gnode, depth)
   end
 
   local params = self:get_request_params(fnode)
-  client.request(self.request_method, params, function(err, result, _)
+  client:request(self.request_method, params, function(err, result, _)
     self:call_handler(err, result, nil, {
       from_node = gnode,
       depth = depth,

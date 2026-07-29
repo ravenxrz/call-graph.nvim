@@ -14,14 +14,14 @@ local Caller = require("call_graph.caller")
 local log = require("call_graph.utils.log")
 
 local function create_user_cmd()
-  vim.api.nvim_create_user_command("CallGraphI", function()
+  vim.api.nvim_create_user_command("CallGraphI", function(args)
     local opts = vim.deepcopy(M.opts)
     if args ~= nil and args.args ~= "" then
       local a = args.args
       assert(tonumber(a), "arg must be a number")
       opts.in_call_max_depth = tonumber(a)
     end
-    Caller.generate_call_graph(M.opts, Caller.CallType.INCOMING_CALL)
+    Caller.generate_call_graph(opts, Caller.CallType.INCOMING_CALL)
   end, { desc = "Generate call graph using incoming call", nargs = "?" })
 
   vim.api.nvim_create_user_command("CallGraphR", function(args)

@@ -547,11 +547,11 @@ function CallGraphView:draw(root_node, traverse_by_incoming)
   if self.buf.bufid == -1 or not vim.api.nvim_buf_is_valid(self.buf.bufid) then
     log.info("Creating new buffer for graph view")
     self.buf.bufid = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_option(self.buf.bufid, "buftype", "nofile")
-    vim.api.nvim_buf_set_option(self.buf.bufid, "buflisted", false)
-    vim.api.nvim_buf_set_option(self.buf.bufid, "swapfile", false)
-    vim.api.nvim_buf_set_option(self.buf.bufid, "modifiable", true)
-    vim.api.nvim_buf_set_option(self.buf.bufid, "filetype", "callgraph")
+    vim.api.nvim_set_option_value("buftype", "nofile", { buf = self.buf.bufid })
+    vim.api.nvim_set_option_value("buflisted", false, { buf = self.buf.bufid })
+    vim.api.nvim_set_option_value("swapfile", false, { buf = self.buf.bufid })
+    vim.api.nvim_set_option_value("modifiable", true, { buf = self.buf.bufid })
+    vim.api.nvim_set_option_value("filetype", "callgraph", { buf = self.buf.bufid })
   end
 
   -- 设置缓冲区名称
